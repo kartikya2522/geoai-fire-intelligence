@@ -186,8 +186,8 @@ export default function Landing() {
           </h2>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
-          <AnimatedStat number="10.3" unit="M"   label="Acres burned in California's worst fire season (2020)" delay={0} />
-          <AnimatedStat number="33"   unit=""    label="People killed in the 2018 Camp Fire alone" delay={0.15} />
+          <AnimatedStat number="4.2" unit="M"   label="Acres burned in California's record 2020 wildfire season" delay={0} />
+          <AnimatedStat number="85"   unit=""    label="People killed in the 2018 Camp Fire — California's deadliest wildfire" delay={0.15} />
           <AnimatedStat number="150"  unit="B+"  label="Economic damage from US wildfires per year (USD)" delay={0.3} />
           <AnimatedStat number="72"   unit="hrs" label="Critical early-response window before fires become uncontrollable" delay={0.45} />
         </div>
