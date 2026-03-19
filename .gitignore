@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+*.pkl
+*.joblib
+models/
+data/raw/
+data/processed/
+frontend/node_modules/
+frontend/dist/
+.vscode/
