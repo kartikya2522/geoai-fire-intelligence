@@ -7,6 +7,7 @@ import FeatureImportance      from '../components/FeatureImportance';
 import ResourceRecommendation from '../components/ResourceRecommendation';
 import SendAlert              from '../components/SendAlert';
 import IncidentReport         from '../components/IncidentReport';
+import WeatherStrip from '../components/WeatherStrip';
 import axios from 'axios';
 
 const API = 'http://localhost:8000';
@@ -416,6 +417,14 @@ export default function Dashboard() {
             <div style={{ marginTop: 14, padding: '10px 14px', background: 'rgba(255,87,34,0.08)', border: '1px solid rgba(255,87,34,0.2)', borderRadius: 'var(--radius-sm)', color: 'var(--ember-300)', fontSize: 13 }}>
               {error}
             </div>
+          )}
+
+          {/* Weather Strip — shows after prediction */}
+          {result && (
+            <WeatherStrip
+              lat={parseFloat(form.Latitude)}
+              lon={parseFloat(form.Longitude)}
+            />
           )}
 
           {/* Report + Simulator — stacked below form */}

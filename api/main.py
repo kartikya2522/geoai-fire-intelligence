@@ -18,9 +18,14 @@ from pathlib import Path
 
 import pandas as pd
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from api.database import init_db, log_prediction, get_history, get_stats
+from api.weather import get_weather
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -55,6 +60,9 @@ app = FastAPI(
     description="Wildfire severity prediction, risk classification, and alert system.",
     version="1.0.0",
 )
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,7 +87,8 @@ async def startup_event() -> None:
     except FileNotFoundError as e:
         log.error("Model artifacts missing: %s", e)
         log.error("Run  python ml/train.py  before starting the API.")
-
+    # Initialize SQLite database
+    init_db()
 
 # ---------------------------------------------------------------------------
 # Pydantic schemas
@@ -152,7 +161,8 @@ async def health():
 # ── Prediction ────────────────────────────────────────────────────────────
 
 @app.post("/predict", tags=["Prediction"])
-async def predict(request: PredictRequest):
+@limiter.limit("30/minute")
+async def predict(request: Request, body: PredictRequest):
     """
     Run wildfire severity prediction.
     Returns risk level (LOW / MEDIUM / HIGH), confidence, and action message.
@@ -160,10 +170,10 @@ async def predict(request: PredictRequest):
     if predictor is None:
         raise HTTPException(503, "Model not loaded. Run python ml/train.py first.")
 
-    result = predictor.predict(request.model_dump())
+    result = predictor.predict(body.model_dump())
     result_dict = result.to_dict()
 
-    # Attach feature importance so the UI can show which factors drove this prediction
+    # Attach feature importances
     if hasattr(predictor._model, 'feature_importances_'):
         importances = predictor._model.feature_importances_
         fi = {
@@ -173,12 +183,25 @@ async def predict(request: PredictRequest):
                 importances
             )
         }
-        # Sort descending
         result_dict['feature_importances'] = dict(
             sorted(fi.items(), key=lambda x: x[1], reverse=True)
         )
     else:
         result_dict['feature_importances'] = {}
+
+    # Fetch weather and add to response
+    weather_data = None
+    try:
+        weather_data = await get_weather(body.Latitude, body.Longitude)
+    except Exception:
+        pass
+    result_dict["weather"] = weather_data
+
+    # Log to SQLite
+    try:
+        log_prediction(result_dict, body.dict())
+    except Exception as e:
+        log.warning("Failed to log prediction: %s", e)
 
     return result_dict
 
@@ -494,4 +517,67 @@ async def send_alert(request: PredictRequest):
         "alerts":     alert_result,
     }
 
+# ---------------------------------------------------------------------------
+# Add these two endpoints to api/main.py
+# ---------------------------------------------------------------------------
+
+@app.get("/history", tags=["History"])
+async def prediction_history(limit: int = 20):
+    """
+    Returns the most recent predictions logged to SQLite.
+    Default limit: 20. Max: 100.
+    """
+    limit = min(limit, 100)
+    try:
+        history = get_history(limit)
+        return {
+            "count": len(history),
+            "predictions": history
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to fetch history: {e}")
+
+
+@app.get("/stats", tags=["History"])
+async def prediction_stats():
+    """
+    Returns aggregate stats from all logged predictions.
+    Total count, by risk level, average confidence.
+    """
+    try:
+        return get_stats()
+    except Exception as e:
+        raise HTTPException(500, f"Failed to fetch stats: {e}")
+
+# ---------------------------------------------------------------------------
+# Add this endpoint to api/main.py
+# ---------------------------------------------------------------------------
+
+@app.get("/weather", tags=["Weather"])
+async def current_weather(lat: float, lon: float):
+    """
+    Returns real-time weather for given coordinates.
+    Includes wind speed, direction, humidity, temperature,
+    red flag warning status, and fire weather risk level.
+    
+    California bounds enforced: Lat 32-42, Lng -125 to -114
+    """
+    # Enforce California bounds
+    if not (32 <= lat <= 42) or not (-125 <= lon <= -114):
+        raise HTTPException(
+            400,
+            "Coordinates outside California bounds. "
+            "Model trained on California data only."
+        )
+
+    weather = await get_weather(lat, lon)
+
+    if weather is None:
+        raise HTTPException(
+            503,
+            "Weather service temporarily unavailable. "
+            "Check OPENWEATHER_API_KEY in .env"
+        )
+
+    return weather
 

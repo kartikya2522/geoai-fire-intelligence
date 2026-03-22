@@ -4,6 +4,7 @@ import Landing   from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import Analytics from './pages/Analytics';
 import Map       from './pages/Map';
+import History from './pages/History';
 
 function Nav() {
   return (
@@ -23,6 +24,7 @@ function Nav() {
         <NavLink to="/dashboard" className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>Predict</NavLink>
         <NavLink to="/map"       className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>Map</NavLink>
         <NavLink to="/analytics" className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>Analytics</NavLink>
+        <NavLink to="/history" className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>History</NavLink>
       </div>
     </nav>
   );
@@ -37,6 +39,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/map"       element={<Map />}       />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/history" element={<History />} />
       </Routes>
     </BrowserRouter>
   );

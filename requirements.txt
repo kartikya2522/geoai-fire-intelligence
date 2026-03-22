@@ -12,3 +12,5 @@ twilio
 qrcode[pil]
 Pillow
 anthropic
+httpx
+slowapi
