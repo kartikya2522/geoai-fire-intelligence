@@ -24,6 +24,7 @@ export default function WildfireMap() {
   const leafletRef        = useRef(null);
   const markersRef        = useRef([]);
   const zoneLayersRef     = useRef([]);
+  const perimeterLayersRef = useRef([]);
   const [incidents,       setIncidents]       = useState([]);
   const [loading,         setLoading]         = useState(true);
   const [error,           setError]           = useState(null);
@@ -32,10 +33,14 @@ export default function WildfireMap() {
   const [firebreakActive, setFirebreakActive] = useState(false);
   const [zoneInfo,        setZoneInfo]        = useState(null);
   const firmsMarkersRef = useRef([]);
-  const [satelliteFires, setSatelliteFires] = useState([]);
-  const [firmsLoading,   setFirmsLoading]   = useState(false);
-  const [showSatellite,  setShowSatellite]  = useState(true);
-  const [firmsDays,      setFirmsDays]      = useState(1);
+  const [satelliteFires,  setSatelliteFires]  = useState([]);
+  const [firmsLoading,    setFirmsLoading]    = useState(false);
+  const [showSatellite,   setShowSatellite]   = useState(true);
+  const [showHistorical,  setShowHistorical]  = useState(false);
+  const [firmsDays,       setFirmsDays]       = useState(1);
+  const [perimeters,        setPerimeters]        = useState([]);
+  const [showPerimeters,    setShowPerimeters]    = useState(false);
+  const [perimetersLoading, setPerimetersLoading] = useState(false);
 
   /* Read URL params — set by RiskCard "View on Map" button */
   const paramLat   = parseFloat(searchParams.get('lat'))   || null;
@@ -173,12 +178,32 @@ export default function WildfireMap() {
     fetchFirms();
   }, [firmsDays]);
 
+  /* ── Fetch fire perimeters ────────────────────────────────── */
+  useEffect(() => {
+    const fetchPerimeters = async () => {
+      setPerimetersLoading(true);
+      try {
+        const { data } = await axios.get(`${API}/fire-perimeters`);
+        setPerimeters(data.perimeters || []);
+      } catch {
+        setPerimeters([]);
+      } finally {
+        setPerimetersLoading(false);
+      }
+    };
+    fetchPerimeters();
+  }, []);
+
   /* ── Render incident markers ──────────────────────────────── */
   useEffect(() => {
-    if (!leafletRef.current || incidents.length === 0) return;
+    if (!leafletRef.current) return;
     const { L, map } = leafletRef.current;
+
+    // Always clear first
     markersRef.current.forEach(m => m.remove());
     markersRef.current = [];
+
+    if (!showHistorical || incidents.length === 0) return;
 
     const filtered = filter === 'ALL' ? incidents : incidents.filter(i => i.risk_level === filter);
 
@@ -211,7 +236,7 @@ export default function WildfireMap() {
       circle.addTo(map);
       markersRef.current.push(circle);
     });
-  }, [incidents, filter]);
+  }, [incidents, filter, showHistorical]);
 
   /* ── Render NASA FIRMS satellite markers ──────────────────── */
   useEffect(() => {
@@ -274,6 +299,52 @@ export default function WildfireMap() {
       firmsMarkersRef.current.push(inner);
     });
   }, [satelliteFires, showSatellite]);
+
+  /* ── Render fire perimeter overlays ──────────────────────── */
+  useEffect(() => {
+    if (!leafletRef.current) return;
+    const { L, map } = leafletRef.current;
+
+    perimeterLayersRef.current.forEach(l => l.remove());
+    perimeterLayersRef.current = [];
+
+    if (!showPerimeters || perimeters.length === 0) return;
+
+    perimeters.forEach(p => {
+      const latlngs = p.coordinates.map(([lng, lat]) => [lat, lng]);
+
+      const polygon = L.polygon(latlngs, {
+        color:       p.color,
+        fillColor:   p.fill,
+        fillOpacity: 1,
+        weight:      2,
+        opacity:     0.9,
+        dashArray:   '6, 4',
+      }).addTo(map);
+
+      polygon.bindPopup(`
+        <div style="font-family:'DM Sans',sans-serif;color:#f0f4ff;min-width:220px">
+          <div style="font-weight:700;font-size:13px;color:${p.color};
+            margin-bottom:8px;padding-bottom:6px;
+            border-bottom:1px solid rgba(255,255,255,0.1)">
+            🔥 ${p.name}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;font-size:12px">
+            <span style="color:#8892aa">Year</span><span>${p.year}</span>
+            <span style="color:#8892aa">Acres Burned</span><span>${p.acres.toLocaleString()}</span>
+            <span style="color:#8892aa">Deaths</span><span style="color:#ff5722;font-weight:600">${p.deaths}</span>
+            <span style="color:#8892aa">County</span><span>${p.county}</span>
+          </div>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.1);
+            font-size:11px;color:#8892aa;line-height:1.5">
+            ${p.description}
+          </div>
+        </div>
+      `, { className: 'fire-popup', maxWidth: 280 });
+
+      perimeterLayersRef.current.push(polygon);
+    });
+  }, [perimeters, showPerimeters]);
 
   /* ── Popup styles ─────────────────────────────────────────── */
   useEffect(() => {
@@ -371,8 +442,9 @@ export default function WildfireMap() {
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: 6 }}>
-          {['ALL', 'LOW', 'MEDIUM', 'HIGH'].map(f => {
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {/* Risk filter — only shows when historical is on */}
+          {showHistorical && ['ALL', 'LOW', 'MEDIUM', 'HIGH'].map(f => {
             const colors = { ALL: 'var(--text-secondary)', LOW: '#00bf55', MEDIUM: '#ffc107', HIGH: '#ff5722' };
             const active = filter === f;
             return (
@@ -389,8 +461,33 @@ export default function WildfireMap() {
           })}
         </div>
 
-        {/* Satellite toggle */}
+        {/* Satellite + Historical + Perimeters toggles */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Historical toggle */}
+          <button onClick={() => setShowHistorical(h => !h)} style={{
+            padding: '5px 12px', borderRadius: 'var(--radius-sm)',
+            border: `1px solid ${showHistorical ? '#ffc107' : 'var(--glass-border)'}`,
+            background: showHistorical ? 'rgba(255,193,7,0.15)' : 'transparent',
+            color: showHistorical ? '#ffc107' : 'var(--text-muted)',
+            fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'var(--font-display)', letterSpacing: '0.06em',
+            transition: 'var(--transition)',
+          }}>
+            📍 Historical ({incidents.length})
+          </button>
+          {/* Perimeters toggle */}
+          <button onClick={() => setShowPerimeters(p => !p)} style={{
+            padding: '5px 12px', borderRadius: 'var(--radius-sm)',
+            border: `1px solid ${showPerimeters ? '#aa00ff' : 'var(--glass-border)'}`,
+            background: showPerimeters ? 'rgba(170,0,255,0.15)' : 'transparent',
+            color: showPerimeters ? '#aa00ff' : 'var(--text-muted)',
+            fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'var(--font-display)', letterSpacing: '0.06em',
+            transition: 'var(--transition)',
+          }}>
+            🗺 Perimeters ({perimeters.length})
+          </button>
+          {/* Satellite toggle */}
           <button onClick={() => setShowSatellite(s => !s)} style={{
             padding: '5px 12px', borderRadius: 'var(--radius-sm)',
             border: `1px solid ${showSatellite ? '#ff5722' : 'var(--glass-border)'}`,
@@ -460,6 +557,16 @@ export default function WildfireMap() {
           </svg>
           <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
             🛰 NASA FIRMS Live Detection
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <svg width="16" height="10">
+            <rect x="0" y="2" width="16" height="6"
+              fill="rgba(170,0,255,0.15)" stroke="#aa00ff"
+              strokeWidth="1.5" strokeDasharray="4,3"/>
+          </svg>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            🗺 Historical Perimeters
           </span>
         </div>
         <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>

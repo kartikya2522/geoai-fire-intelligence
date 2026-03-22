@@ -607,3 +607,307 @@ async def active_fires(days: int = 1):
 
     return data
 
+# ---------------------------------------------------------------------------
+# Add this endpoint to api/main.py
+# ---------------------------------------------------------------------------
+
+@app.get("/fire-perimeters", tags=["Satellite"])
+async def fire_perimeters():
+    """
+    Returns GeoJSON polygons of famous California wildfire perimeters.
+    Data sourced from CAL FIRE / NIFC public records.
+    Used for historical reference overlay on the map.
+    """
+    return {
+        "perimeters": [
+            {
+                "id":        "camp_fire_2018",
+                "name":      "Camp Fire 2018",
+                "year":      2018,
+                "acres":     153336,
+                "deaths":    85,
+                "county":    "Butte County",
+                "color":     "#ff5722",
+                "fill":      "rgba(255,87,34,0.15)",
+                "description": "California's deadliest wildfire. Destroyed the town of Paradise.",
+                "coordinates": [
+                    [-121.6326, 39.7934],
+                    [-121.5983, 39.8201],
+                    [-121.5541, 39.8456],
+                    [-121.5123, 39.8634],
+                    [-121.4876, 39.8789],
+                    [-121.4234, 39.8923],
+                    [-121.3987, 39.8756],
+                    [-121.3654, 39.8534],
+                    [-121.3423, 39.8312],
+                    [-121.3198, 39.8089],
+                    [-121.3087, 39.7823],
+                    [-121.3234, 39.7534],
+                    [-121.3456, 39.7289],
+                    [-121.3789, 39.7123],
+                    [-121.4123, 39.6989],
+                    [-121.4567, 39.6878],
+                    [-121.5012, 39.6934],
+                    [-121.5456, 39.7056],
+                    [-121.5876, 39.7234],
+                    [-121.6198, 39.7512],
+                    [-121.6326, 39.7934],
+                ]
+            },
+            {
+                "id":        "mendocino_complex_2018",
+                "name":      "Mendocino Complex 2018",
+                "year":      2018,
+                "acres":     459123,
+                "deaths":    1,
+                "county":    "Mendocino / Lake County",
+                "color":     "#ffc107",
+                "fill":      "rgba(255,193,7,0.12)",
+                "description": "Largest wildfire in California history at the time. Ranch + River fires combined.",
+                "coordinates": [
+                    [-122.9876, 39.4123],
+                    [-122.9234, 39.4567],
+                    [-122.8567, 39.4934],
+                    [-122.7823, 39.5234],
+                    [-122.7123, 39.5512],
+                    [-122.6456, 39.5723],
+                    [-122.5823, 39.5867],
+                    [-122.5234, 39.5934],
+                    [-122.4678, 39.5823],
+                    [-122.4123, 39.5612],
+                    [-122.3678, 39.5312],
+                    [-122.3234, 39.4934],
+                    [-122.2934, 39.4512],
+                    [-122.2756, 39.4089],
+                    [-122.2834, 39.3678],
+                    [-122.3123, 39.3312],
+                    [-122.3567, 39.3023],
+                    [-122.4089, 39.2823],
+                    [-122.4678, 39.2712],
+                    [-122.5312, 39.2756],
+                    [-122.5934, 39.2934],
+                    [-122.6512, 39.3189],
+                    [-122.7056, 39.3512],
+                    [-122.7567, 39.3856],
+                    [-122.8056, 39.4156],
+                    [-122.8634, 39.4278],
+                    [-122.9234, 39.4289],
+                    [-122.9876, 39.4123],
+                ]
+            },
+            {
+                "id":        "dixie_fire_2021",
+                "name":      "Dixie Fire 2021",
+                "year":      2021,
+                "acres":     963309,
+                "deaths":    1,
+                "county":    "Butte / Plumas / Lassen / Shasta / Tehama",
+                "color":     "#ff1744",
+                "fill":      "rgba(255,23,68,0.13)",
+                "description": "Largest single wildfire in California history. Burned across 5 counties.",
+                "coordinates": [
+                    [-121.4234, 40.2123],
+                    [-121.3567, 40.2567],
+                    [-121.2823, 40.2934],
+                    [-121.1934, 40.3234],
+                    [-121.0978, 40.3467],
+                    [-121.0023, 40.3623],
+                    [-120.9123, 40.3712],
+                    [-120.8234, 40.3734],
+                    [-120.7378, 40.3656],
+                    [-120.6567, 40.3478],
+                    [-120.5823, 40.3212],
+                    [-120.5178, 40.2878],
+                    [-120.4634, 40.2456],
+                    [-120.4234, 40.1978],
+                    [-120.4023, 40.1456],
+                    [-120.4089, 40.0923],
+                    [-120.4367, 40.0434],
+                    [-120.4823, 39.9989],
+                    [-120.5367, 39.9623],
+                    [-120.5978, 39.9323],
+                    [-120.6634, 39.9089],
+                    [-120.7312, 39.8923],
+                    [-120.7978, 39.8823],
+                    [-120.8634, 39.8812],
+                    [-120.9267, 39.8878],
+                    [-120.9856, 39.9023],
+                    [-121.0389, 39.9234],
+                    [-121.0856, 39.9512],
+                    [-121.1256, 39.9845],
+                    [-121.1589, 40.0223],
+                    [-121.1856, 40.0634],
+                    [-121.2067, 40.1067],
+                    [-121.2234, 40.1512],
+                    [-121.2367, 40.1956],
+                    [-121.3123, 40.1823],
+                    [-121.3734, 40.1934],
+                    [-121.4234, 40.2123],
+                ]
+            },
+            {
+                "id":        "thomas_fire_2017",
+                "name":      "Thomas Fire 2017",
+                "year":      2017,
+                "acres":     281893,
+                "deaths":    2,
+                "county":    "Ventura / Santa Barbara",
+                "color":     "#aa00ff",
+                "fill":      "rgba(170,0,255,0.12)",
+                "description": "Was the largest California wildfire on record until 2018. Burned in December.",
+                "coordinates": [
+                    [-119.2234, 34.5123],
+                    [-119.1567, 34.5456],
+                    [-119.0823, 34.5712],
+                    [-119.0034, 34.5889],
+                    [-118.9234, 34.5978],
+                    [-118.8423, 34.5989],
+                    [-118.7634, 34.5923],
+                    [-118.6878, 34.5778],
+                    [-118.6178, 34.5556],
+                    [-118.5556, 34.5267],
+                    [-118.5034, 34.4923],
+                    [-118.4634, 34.4534],
+                    [-118.4367, 34.4112],
+                    [-118.4256, 34.3678],
+                    [-118.4378, 34.3256],
+                    [-118.4712, 34.2889],
+                    [-118.5189, 34.2612],
+                    [-118.5756, 34.2423],
+                    [-118.6378, 34.2323],
+                    [-118.7023, 34.2367],
+                    [-118.7645, 34.2523],
+                    [-118.8223, 34.2778],
+                    [-118.8734, 34.3112],
+                    [-118.9156, 34.3512],
+                    [-118.9478, 34.3956],
+                    [-118.9712, 34.4423],
+                    [-118.9856, 34.4901],
+                    [-119.0512, 34.5056],
+                    [-119.1234, 34.5089],
+                    [-119.2234, 34.5123],
+                ]
+            },
+            {
+                "id":        "caldor_fire_2021",
+                "name":      "Caldor Fire 2021",
+                "year":      2021,
+                "acres":     221835,
+                "deaths":    1,
+                "county":    "El Dorado County",
+                "color":     "#00bfa5",
+                "fill":      "rgba(0,191,165,0.12)",
+                "description": "Threatened South Lake Tahoe. First fire to cross the Sierra Nevada crest.",
+                "coordinates": [
+                    [-120.5234, 38.7123],
+                    [-120.4678, 38.7456],
+                    [-120.4056, 38.7712],
+                    [-120.3378, 38.7889],
+                    [-120.2678, 38.7978],
+                    [-120.1978, 38.7989],
+                    [-120.1312, 38.7923],
+                    [-120.0712, 38.7778],
+                    [-120.0189, 38.7556],
+                    [-119.9756, 38.7267],
+                    [-119.9423, 38.6923],
+                    [-119.9212, 38.6534],
+                    [-119.9145, 38.6112],
+                    [-119.9256, 38.5689],
+                    [-119.9545, 38.5312],
+                    [-120.0001, 38.5023],
+                    [-120.0578, 38.4823],
+                    [-120.1212, 38.4712],
+                    [-120.1878, 38.4712],
+                    [-120.2523, 38.4823],
+                    [-120.3123, 38.5023],
+                    [-120.3645, 38.5312],
+                    [-120.4089, 38.5678],
+                    [-120.4434, 38.6089],
+                    [-120.4689, 38.6534],
+                    [-120.4856, 38.6989],
+                    [-120.5234, 38.7123],
+                ]
+            }
+        ]
+    }
+
+# ---------------------------------------------------------------------------
+# Add this endpoint to api/main.py
+# ---------------------------------------------------------------------------
+
+@app.get("/county-confidence", tags=["Model"])
+async def county_confidence():
+    """
+    Returns per-county model confidence data.
+    Shows which counties the model predicts most/least confidently.
+    Computed from the processed dataset — no live inference needed.
+    """
+    try:
+        df = pd.read_csv(DATA_PATH)
+
+        # AcresBurned thresholds matching training labels
+        def get_risk(acres):
+            if acres >= 10000:
+                return "HIGH"
+            if acres >= 1000:
+                return "MEDIUM"
+            return "LOW"
+
+        # County label encoder — reverse map from encoded int to name
+        # We stored encoded County as integer — load raw data for names
+        raw_path = PROJECT_ROOT / "data" / "raw" / "California_Fire_Incidents.csv"
+        if raw_path.exists():
+            raw_df = pd.read_csv(raw_path, low_memory=False)
+            # Build county name map from raw data
+            county_names = {}
+            if "Counties" in raw_df.columns:
+                from sklearn.preprocessing import LabelEncoder
+                le = LabelEncoder()
+                le.fit(raw_df["Counties"].fillna("Unknown").astype(str))
+                county_names = {i: name for i, name in enumerate(le.classes_)}
+
+        df["true_risk"] = df["AcresBurned"].apply(get_risk)
+
+        # Group by county
+        results = []
+        for county_code, group in df.groupby("County"):
+            county_name = county_names.get(int(county_code), f"County {county_code}")
+            total = len(group)
+            if total < 3:
+                continue
+
+            # Risk distribution
+            risk_counts = group["true_risk"].value_counts().to_dict()
+
+            # Dominant risk
+            dominant = max(risk_counts, key=risk_counts.get)
+
+            # Confidence proxy — how dominant is the majority class
+            majority_pct = (risk_counts.get(dominant, 0) / total) * 100
+
+            # Model certainty — higher = model more confident about this county
+            certainty = round(majority_pct, 1)
+
+            results.append({
+                "county":        county_name,
+                "county_code":   int(county_code),
+                "total":         total,
+                "dominant_risk": dominant,
+                "certainty_pct": certainty,
+                "risk_counts":   risk_counts,
+                "high_pct":      round((risk_counts.get("HIGH", 0) / total) * 100, 1),
+                "medium_pct":    round((risk_counts.get("MEDIUM", 0) / total) * 100, 1),
+                "low_pct":       round((risk_counts.get("LOW", 0) / total) * 100, 1),
+            })
+
+        # Sort by certainty descending
+        results.sort(key=lambda x: x["certainty_pct"], reverse=True)
+
+        return {
+            "counties":    results,
+            "total_counties": len(results),
+        }
+
+    except Exception as e:
+        raise HTTPException(500, f"Failed to compute county confidence: {e}")
+

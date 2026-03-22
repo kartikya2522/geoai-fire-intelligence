@@ -8,6 +8,7 @@ import {
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { fetchAnalytics, fetchModelInfo } from '../hooks/usePrediction';
+import CountyConfidence from '../components/CountyConfidence';
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, ArcElement,
@@ -371,6 +372,9 @@ export default function Analytics() {
           <InsightCard key={item.title} title={item.title} body={item.body} delay={i * 0.1} />
         ))}
       </div>
+      {/* County Confidence Heatmap */}
+      <SectionTitle>Model Confidence by County</SectionTitle>
+      <CountyConfidence />
     </div>
   );
 }
