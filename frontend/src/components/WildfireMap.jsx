@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 
-const API = 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const RISK_COLORS  = {
   LOW:    { color: '#00bf55', fill: '#00bf55' },
@@ -31,6 +31,11 @@ export default function WildfireMap() {
   const [stats,           setStats]           = useState({ LOW: 0, MEDIUM: 0, HIGH: 0 });
   const [firebreakActive, setFirebreakActive] = useState(false);
   const [zoneInfo,        setZoneInfo]        = useState(null);
+  const firmsMarkersRef = useRef([]);
+  const [satelliteFires, setSatelliteFires] = useState([]);
+  const [firmsLoading,   setFirmsLoading]   = useState(false);
+  const [showSatellite,  setShowSatellite]  = useState(true);
+  const [firmsDays,      setFirmsDays]      = useState(1);
 
   /* Read URL params — set by RiskCard "View on Map" button */
   const paramLat   = parseFloat(searchParams.get('lat'))   || null;
@@ -86,13 +91,11 @@ export default function WildfireMap() {
 
   /* ── Draw firebreak circles ───────────────────────────────── */
   const drawFirebreakZones = (L, map, lat, lng, risk, acres) => {
-    // Clear existing zone layers
     zoneLayersRef.current.forEach(l => l.remove());
     zoneLayersRef.current = [];
 
     const cfg = RISK_COLORS[risk] || RISK_COLORS.HIGH;
 
-    // Draw zones largest → smallest so smaller sits on top
     [...ZONES].reverse().forEach(zone => {
       const circle = L.circle([lat, lng], {
         radius:      zone.km * 1000,
@@ -111,7 +114,6 @@ export default function WildfireMap() {
       zoneLayersRef.current.push(circle);
     });
 
-    // Fire epicentre marker
     const epicentre = L.circleMarker([lat, lng], {
       radius: 10, color: cfg.color, fillColor: cfg.fill,
       fillOpacity: 0.9, weight: 2.5,
@@ -133,10 +135,7 @@ export default function WildfireMap() {
 
     epicentre.openPopup();
     zoneLayersRef.current.push(epicentre);
-
-    // Pan map to fire location
     map.flyTo([lat, lng], 8, { duration: 1.4, easeLinearity: 0.3 });
-
     setZoneInfo({ lat, lng, risk, acres });
   };
 
@@ -157,6 +156,22 @@ export default function WildfireMap() {
     };
     fetchData();
   }, []);
+
+  /* ── Fetch NASA FIRMS satellite fires ─────────────────────── */
+  useEffect(() => {
+    const fetchFirms = async () => {
+      setFirmsLoading(true);
+      try {
+        const { data } = await axios.get(`${API}/active-fires?days=${firmsDays}`);
+        setSatelliteFires(data.fires || []);
+      } catch {
+        setSatelliteFires([]);
+      } finally {
+        setFirmsLoading(false);
+      }
+    };
+    fetchFirms();
+  }, [firmsDays]);
 
   /* ── Render incident markers ──────────────────────────────── */
   useEffect(() => {
@@ -197,6 +212,68 @@ export default function WildfireMap() {
       markersRef.current.push(circle);
     });
   }, [incidents, filter]);
+
+  /* ── Render NASA FIRMS satellite markers ──────────────────── */
+  useEffect(() => {
+    if (!leafletRef.current) return;
+    const { L, map } = leafletRef.current;
+
+    firmsMarkersRef.current.forEach(m => m.remove());
+    firmsMarkersRef.current = [];
+
+    if (!showSatellite) return;
+
+    satelliteFires.forEach(fire => {
+      const cfg    = RISK_COLORS[fire.risk_level] || RISK_COLORS.LOW;
+      const radius = RISK_RADIUS[fire.risk_level] || 6;
+
+      const outerRing = L.circleMarker([fire.latitude, fire.longitude], {
+        radius:      radius + 6,
+        color:       cfg.color,
+        fillColor:   'transparent',
+        fillOpacity: 0,
+        weight:      1.5,
+        opacity:     0.4,
+      }).addTo(map);
+
+      const inner = L.circleMarker([fire.latitude, fire.longitude], {
+        radius,
+        color:       '#fff',
+        fillColor:   cfg.color,
+        fillOpacity: 0.95,
+        weight:      2,
+        opacity:     1,
+      });
+
+      inner.bindPopup(`
+        <div style="font-family:'DM Sans',sans-serif;color:#f0f4ff;min-width:210px">
+          <div style="font-weight:700;font-size:13px;color:${cfg.color};
+            margin-bottom:8px;padding-bottom:6px;
+            border-bottom:1px solid rgba(255,255,255,0.1)">
+            🛰 NASA FIRMS — Live Detection
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;font-size:12px">
+            <span style="color:#8892aa">Risk Level</span>
+            <span style="color:${cfg.color};font-weight:700">${fire.risk_level}</span>
+            <span style="color:#8892aa">Fire Power</span>
+            <span>${fire.frp} MW</span>
+            <span style="color:#8892aa">Confidence</span>
+            <span>${fire.confidence}</span>
+            <span style="color:#8892aa">Detected</span>
+            <span>${fire.acq_date} ${fire.acq_time}Z</span>
+            <span style="color:#8892aa">Satellite</span>
+            <span>VIIRS NOAA-20</span>
+            <span style="color:#8892aa">Day/Night</span>
+            <span>${fire.daynight === 'D' ? '☀ Day' : '🌙 Night'}</span>
+          </div>
+        </div>
+      `, { className: 'fire-popup', maxWidth: 260 });
+
+      inner.addTo(map);
+      firmsMarkersRef.current.push(outerRing);
+      firmsMarkersRef.current.push(inner);
+    });
+  }, [satelliteFires, showSatellite]);
 
   /* ── Popup styles ─────────────────────────────────────────── */
   useEffect(() => {
@@ -245,7 +322,6 @@ export default function WildfireMap() {
               Firebreak zones active — <strong style={{ color: '#fff' }}>{zoneInfo.risk}</strong> risk fire at{' '}
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{zoneInfo.lat?.toFixed(3)}, {zoneInfo.lng?.toFixed(3)}</span>
             </span>
-            {/* Zone legend inline */}
             <div style={{ display: 'flex', gap: 12 }}>
               {ZONES.map(z => (
                 <div key={z.key} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -284,6 +360,15 @@ export default function WildfireMap() {
           <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             {incidents.length} incidents
           </span>
+          {satelliteFires.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%',
+                background: '#ff5722', border: '2px solid #fff' }}/>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                Live: <strong style={{ color: '#ff5722' }}>{satelliteFires.length}</strong>
+              </span>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 6 }}>
@@ -302,6 +387,32 @@ export default function WildfireMap() {
               }}>{f}</button>
             );
           })}
+        </div>
+
+        {/* Satellite toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setShowSatellite(s => !s)} style={{
+            padding: '5px 12px', borderRadius: 'var(--radius-sm)',
+            border: `1px solid ${showSatellite ? '#ff5722' : 'var(--glass-border)'}`,
+            background: showSatellite ? 'rgba(255,87,34,0.15)' : 'transparent',
+            color: showSatellite ? '#ff5722' : 'var(--text-muted)',
+            fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            fontFamily: 'var(--font-display)', letterSpacing: '0.06em',
+            transition: 'var(--transition)',
+            display: 'flex', alignItems: 'center', gap: 5,
+          }}>
+            🛰 {firmsLoading ? 'Loading...' : `Live (${satelliteFires.length})`}
+          </button>
+          <select value={firmsDays} onChange={e => setFirmsDays(Number(e.target.value))}
+            style={{
+              background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)',
+              borderRadius: 'var(--radius-sm)', color: 'var(--text-secondary)',
+              fontSize: 11, padding: '4px 8px', cursor: 'pointer',
+            }}>
+            <option value={1}>Today</option>
+            <option value={3}>3 days</option>
+            <option value={7}>7 days</option>
+          </select>
         </div>
       </div>
 
@@ -342,6 +453,15 @@ export default function WildfireMap() {
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{l.label}</span>
           </div>
         ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <svg width="16" height="16">
+            <circle cx="8" cy="8" r="5" fill="#ff5722" stroke="#fff" strokeWidth="2"/>
+            <circle cx="8" cy="8" r="9" fill="none" stroke="#ff5722" strokeWidth="1" opacity="0.4"/>
+          </svg>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            🛰 NASA FIRMS Live Detection
+          </span>
+        </div>
         <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
           {hasPrediction ? 'Firebreak zones drawn from prediction ↑' : 'Run a prediction to see firebreak zones'}
         </span>

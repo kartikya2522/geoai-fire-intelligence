@@ -26,6 +26,7 @@ from api.weather import get_weather
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from api.firms import get_active_fires
 
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -580,4 +581,29 @@ async def current_weather(lat: float, lon: float):
         )
 
     return weather
+
+# ---------------------------------------------------------------------------
+# Add these to api/main.py
+# ---------------------------------------------------------------------------
+
+# 1. Add import at top:
+# from api.firms import get_active_fires
+
+# 2. Add this endpoint:
+
+@app.get("/active-fires", tags=["Satellite"])
+async def active_fires(days: int = 1):
+    """
+    Returns real-time active fire detections in California
+    from NASA FIRMS VIIRS NOAA-20 satellite.
+    Updated every 10 minutes.
+    
+    days: 1-10 days lookback (default: 1)
+    """
+    data = await get_active_fires(days)
+
+    if data.get("error") and data["count"] == 0:
+        raise HTTPException(503, f"NASA FIRMS unavailable: {data['error']}")
+
+    return data
 
