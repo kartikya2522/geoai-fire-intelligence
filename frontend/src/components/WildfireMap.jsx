@@ -41,6 +41,13 @@ export default function WildfireMap() {
   const [perimeters,        setPerimeters]        = useState([]);
   const [showPerimeters,    setShowPerimeters]    = useState(false);
   const [perimetersLoading, setPerimetersLoading] = useState(false);
+  const [spreadPolygons,    setSpreadPolygons]    = useState(null);
+  const [showSpread,        setShowSpread]        = useState(false);
+  const spreadLayersRef     = useRef([]);
+  const [smokePlume,        setSmokePlume]        = useState(null);
+  const [showSmoke,         setShowSmoke]         = useState(false);
+  const smokePlumeLayerRef  = useRef(null);
+  const [weatherData,       setWeatherData]       = useState(null);
 
   /* Read URL params — set by RiskCard "View on Map" button */
   const paramLat   = parseFloat(searchParams.get('lat'))   || null;
@@ -54,6 +61,7 @@ export default function WildfireMap() {
   useEffect(() => {
     const init = async () => {
       if (leafletRef.current) return;
+      if (mapRef.current._leaflet_id) return;
       const L = await import('leaflet');
       await import('leaflet/dist/leaflet.css');
 
@@ -95,7 +103,7 @@ export default function WildfireMap() {
   }, []);
 
   /* ── Draw firebreak circles ───────────────────────────────── */
-  const drawFirebreakZones = (L, map, lat, lng, risk, acres) => {
+  const drawFirebreakZones = async (L, map, lat, lng, risk, acres) => {
     zoneLayersRef.current.forEach(l => l.remove());
     zoneLayersRef.current = [];
 
@@ -142,6 +150,54 @@ export default function WildfireMap() {
     zoneLayersRef.current.push(epicentre);
     map.flyTo([lat, lng], 8, { duration: 1.4, easeLinearity: 0.3 });
     setZoneInfo({ lat, lng, risk, acres });
+
+    // Fetch weather data for spread/smoke predictions
+    try {
+      const { data: weather } = await axios.get(`${API}/weather`, { params: { lat, lon: lng } });
+      setWeatherData(weather);
+
+      // Auto-fetch spread and smoke predictions
+      if (weather?.wind_speed_kmh && weather?.wind_deg) {
+        fetchSpreadPrediction(lat, lng, weather.wind_speed_kmh, weather.wind_deg, risk, acres);
+        fetchSmokePlume(lat, lng, weather.wind_deg, weather.wind_speed_kmh);
+      }
+    } catch (e) {
+      console.warn('Weather fetch failed:', e);
+    }
+  };
+
+  /* ── Fetch spread prediction ──────────────────────────────── */
+  const fetchSpreadPrediction = async (lat, lng, windSpeed, windDeg, risk, acres) => {
+    try {
+      const { data } = await axios.post(`${API}/spread-prediction`, {
+        latitude: lat,
+        longitude: lng,
+        wind_speed_kmh: windSpeed,
+        wind_deg: windDeg,
+        risk_level: risk,
+        acres_est: acres || 1000,
+      });
+      setSpreadPolygons(data);
+      setShowSpread(true);
+    } catch (e) {
+      console.warn('Spread prediction failed:', e);
+    }
+  };
+
+  /* ── Fetch smoke plume ─────────────────────────────────────── */
+  const fetchSmokePlume = async (lat, lng, windDeg, windSpeed) => {
+    try {
+      const { data } = await axios.post(`${API}/smoke-plume`, {
+        latitude: lat,
+        longitude: lng,
+        wind_deg: windDeg,
+        wind_speed_kmh: windSpeed,
+      });
+      setSmokePlume(data);
+      setShowSmoke(true);
+    } catch (e) {
+      console.warn('Smoke plume fetch failed:', e);
+    }
   };
 
   /* ── Fetch incidents ──────────────────────────────────────── */
@@ -346,6 +402,86 @@ export default function WildfireMap() {
     });
   }, [perimeters, showPerimeters]);
 
+  /* ── Render fire spread polygons ──────────────────────────── */
+  useEffect(() => {
+    if (!leafletRef.current) return;
+    const { L, map } = leafletRef.current;
+
+    spreadLayersRef.current.forEach(l => l.remove());
+    spreadLayersRef.current = [];
+
+    if (!showSpread || !spreadPolygons) return;
+
+    const { spread_6h, spread_12h, spread_24h } = spreadPolygons;
+
+    // 24h polygon (largest, lowest opacity, red)
+    if (spread_24h?.length) {
+      const poly24 = L.polygon(spread_24h, {
+        color:       '#ff1744',
+        fillColor:   '#ff1744',
+        fillOpacity: 0.08,
+        weight:      2,
+        opacity:     0.6,
+        dashArray:   '8, 6',
+      }).addTo(map);
+      poly24.bindTooltip('24-hour spread projection', { permanent: false });
+      spreadLayersRef.current.push(poly24);
+    }
+
+    // 12h polygon (medium, orange)
+    if (spread_12h?.length) {
+      const poly12 = L.polygon(spread_12h, {
+        color:       '#ff9800',
+        fillColor:   '#ff9800',
+        fillOpacity: 0.12,
+        weight:      2,
+        opacity:     0.7,
+        dashArray:   '6, 4',
+      }).addTo(map);
+      poly12.bindTooltip('12-hour spread projection', { permanent: false });
+      spreadLayersRef.current.push(poly12);
+    }
+
+    // 6h polygon (smallest, highest opacity, amber)
+    if (spread_6h?.length) {
+      const poly6 = L.polygon(spread_6h, {
+        color:       '#ffc107',
+        fillColor:   '#ffc107',
+        fillOpacity: 0.18,
+        weight:      2.5,
+        opacity:     0.85,
+        dashArray:   '4, 3',
+      }).addTo(map);
+      poly6.bindTooltip('6-hour spread projection', { permanent: false });
+      spreadLayersRef.current.push(poly6);
+    }
+  }, [spreadPolygons, showSpread]);
+
+  /* ── Render smoke plume ────────────────────────────────────── */
+  useEffect(() => {
+    if (!leafletRef.current) return;
+    const { L, map } = leafletRef.current;
+
+    if (smokePlumeLayerRef.current) {
+      smokePlumeLayerRef.current.remove();
+      smokePlumeLayerRef.current = null;
+    }
+
+    if (!showSmoke || !smokePlume?.plume) return;
+
+    const plume = L.polygon(smokePlume.plume, {
+      color:       '#8B5A2B',
+      fillColor:   'rgba(120,80,40,0.15)',
+      fillOpacity: 1,
+      weight:      2,
+      opacity:     0.6,
+      dashArray:   '6, 4',
+    }).addTo(map);
+
+    plume.bindTooltip('Smoke plume trajectory (50km downwind)', { permanent: false });
+    smokePlumeLayerRef.current = plume;
+  }, [smokePlume, showSmoke]);
+
   /* ── Popup styles ─────────────────────────────────────────── */
   useEffect(() => {
     const style = document.createElement('style');
@@ -360,6 +496,7 @@ export default function WildfireMap() {
       .fire-popup .leaflet-popup-tip { background: rgba(13,17,23,0.95) !important; }
       .fire-popup .leaflet-popup-close-button { color: #8892aa !important; font-size: 16px !important; }
       .leaflet-container { background: #060810 !important; }
+      path.leaflet-interactive:focus { outline: none !important; }
     `;
     document.head.appendChild(style);
     return () => document.head.removeChild(style);
@@ -487,6 +624,34 @@ export default function WildfireMap() {
           }}>
             🗺 Perimeters ({perimeters.length})
           </button>
+          {/* Spread toggle */}
+          {firebreakActive && (
+            <button onClick={() => setShowSpread(s => !s)} style={{
+              padding: '5px 12px', borderRadius: 'var(--radius-sm)',
+              border: `1px solid ${showSpread ? '#ffc107' : 'var(--glass-border)'}`,
+              background: showSpread ? 'rgba(255,193,7,0.15)' : 'transparent',
+              color: showSpread ? '#ffc107' : 'var(--text-muted)',
+              fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'var(--font-display)', letterSpacing: '0.06em',
+              transition: 'var(--transition)',
+            }}>
+              🔥 Spread
+            </button>
+          )}
+          {/* Smoke toggle */}
+          {firebreakActive && (
+            <button onClick={() => setShowSmoke(s => !s)} style={{
+              padding: '5px 12px', borderRadius: 'var(--radius-sm)',
+              border: `1px solid ${showSmoke ? '#8B5A2B' : 'var(--glass-border)'}`,
+              background: showSmoke ? 'rgba(139,90,43,0.15)' : 'transparent',
+              color: showSmoke ? '#8B5A2B' : 'var(--text-muted)',
+              fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'var(--font-display)', letterSpacing: '0.06em',
+              transition: 'var(--transition)',
+            }}>
+              💨 Smoke
+            </button>
+          )}
           {/* Satellite toggle */}
           <button onClick={() => setShowSatellite(s => !s)} style={{
             padding: '5px 12px', borderRadius: 'var(--radius-sm)',
@@ -569,6 +734,30 @@ export default function WildfireMap() {
             🗺 Historical Perimeters
           </span>
         </div>
+        {firebreakActive && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <svg width="16" height="10">
+                <rect x="0" y="2" width="16" height="6"
+                  fill="rgba(255,193,7,0.18)" stroke="#ffc107"
+                  strokeWidth="2" strokeDasharray="4,3"/>
+              </svg>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                🔥 Fire Spread (6h/12h/24h)
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <svg width="16" height="10">
+                <rect x="0" y="2" width="16" height="6"
+                  fill="rgba(120,80,40,0.15)" stroke="#8B5A2B"
+                  strokeWidth="2" strokeDasharray="6,4"/>
+              </svg>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                💨 Smoke Plume (50km)
+              </span>
+            </div>
+          </>
+        )}
         <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
           {hasPrediction ? 'Firebreak zones drawn from prediction ↑' : 'Run a prediction to see firebreak zones'}
         </span>

@@ -359,7 +359,7 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 420px', gap: 24, alignItems: 'start' }}>
 
         {/* ── Left — Form ───────────────────────────────────── */}
-        <div className="glass-card" style={{ padding: 28 }}>
+        <div className="glass-card" style={{ padding: 28, minWidth: 0, overflow: 'hidden' }}>
 
           <div style={{ marginBottom: 22 }}>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 12, color: 'var(--text-secondary)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 14, paddingBottom: 8, borderBottom: '1px solid var(--glass-border)' }}>

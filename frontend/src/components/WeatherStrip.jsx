@@ -31,6 +31,8 @@ export default function WeatherStrip({ lat, lon }) {
   const [weather, setWeather]   = useState(null);
   const [loading, setLoading]   = useState(false);
   const [error,   setError]     = useState(null);
+  const [aqi,     setAqi]       = useState(null);
+  const [aqiLoading, setAqiLoading] = useState(false);
 
   useEffect(() => {
     if (!lat || !lon) return;
@@ -47,6 +49,22 @@ export default function WeatherStrip({ lat, lon }) {
       }
     };
     fetch();
+  }, [lat, lon]);
+
+  useEffect(() => {
+    if (!lat || !lon) return;
+    const fetchAqi = async () => {
+      setAqiLoading(true);
+      try {
+        const { data } = await axios.get(`${API}/aqi`, { params: { lat, lon } });
+        setAqi(data);
+      } catch {
+        setAqi(null);
+      } finally {
+        setAqiLoading(false);
+      }
+    };
+    fetchAqi();
   }, [lat, lon]);
 
   if (!lat || !lon) return null;
@@ -117,6 +135,53 @@ export default function WeatherStrip({ lat, lon }) {
         <WeatherStat icon="🧭" label="Direction" value={weather.wind_direction} />
         <WeatherStat icon="🌥" label="Condition" value={weather.description} />
         <WeatherStat icon="🌡" label="Feels Like" value={`${weather.feels_like_c}°C`} />
+
+        {/* AQI stat */}
+        {aqiLoading && (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: 4, padding: '10px 16px',
+            borderRight: '1px solid var(--glass-border)',
+            minWidth: 90,
+          }}>
+            <span className="spinner" style={{ width: 14, height: 14 }}/>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>AQI</span>
+          </div>
+        )}
+        {!aqiLoading && aqi?.aqi !== null && aqi?.aqi !== undefined && (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: 4, padding: '10px 16px',
+            borderRight: '1px solid var(--glass-border)',
+            minWidth: 110,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{
+                width: 8, height: 8, borderRadius: '50%',
+                background: aqi.color,
+              }}/>
+              <span style={{ fontSize: 18 }}>🌫</span>
+            </div>
+            <span style={{ fontSize: 15, fontWeight: 700,
+              color: aqi.color || 'var(--text-primary)',
+              fontFamily: 'var(--font-display)' }}>{aqi.aqi}</span>
+            <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase',
+              letterSpacing: '0.06em', fontFamily: 'var(--font-display)',
+              textAlign: 'center' }}>AQI</span>
+          </div>
+        )}
+        {!aqiLoading && (!aqi || aqi.aqi === null) && (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: 4, padding: '10px 16px',
+            borderRight: '1px solid var(--glass-border)',
+            minWidth: 90,
+          }}>
+            <span style={{ fontSize: 18 }}>🌫</span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>No AQI</span>
+          </div>
+        )}
+
         <div style={{ padding: '10px 14px', fontSize: 11,
           color: 'var(--text-muted)', fontFamily: 'var(--font-mono)',
           whiteSpace: 'nowrap' }}>
@@ -124,6 +189,35 @@ export default function WeatherStrip({ lat, lon }) {
           Visibility: {(weather.raw.visibility_m / 1000).toFixed(1)} km
         </div>
       </div>
+
+      {/* AQI warning banner */}
+      {aqi?.aqi > 150 && (
+        <div style={{
+          padding: '8px 14px',
+          background: 'rgba(255,87,34,0.1)',
+          borderTop: '1px solid rgba(255,87,34,0.3)',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{ fontSize: 16 }}>⚠️</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#ff5722',
+              fontFamily: 'var(--font-display)' }}>
+              Unhealthy Air Quality
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              {aqi.category} — AQI {aqi.aqi} (PM2.5: {aqi.pm25} μg/m³)
+              {aqi.pm25 > 55 && ' · Sensitive groups at risk'}
+            </div>
+          </div>
+          {aqi.station && (
+            <div style={{ fontSize: 10, color: 'var(--text-muted)',
+              fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
+              {aqi.station}<br/>
+              {aqi.distance_km}km away
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

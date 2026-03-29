@@ -563,6 +563,39 @@ async def prediction_stats():
 # Add this endpoint to api/main.py
 # ---------------------------------------------------------------------------
 
+# ── Air Quality Index (AQI) ───────────────────────────────────────────────
+
+@app.get("/aqi", tags=["Weather"])
+async def aqi_endpoint(lat: float, lon: float):
+    """
+    Fetch Air Quality Index (AQI) from OpenAQ v3 API.
+    
+    Returns PM2.5-based AQI with health category and color.
+    Search radius: 50km from given coordinates.
+    """
+    from api.aqi import get_aqi
+    try:
+        result = await get_aqi(lat, lon, radius_km=50)
+        if result is None:
+            return {
+                "aqi": None,
+                "category": "Unavailable",
+                "pm25": None,
+                "color": "#8892aa",
+                "error": "OpenAQ API unavailable or API key not set"
+            }
+        return result
+    except Exception as e:
+        log.warning("AQI endpoint failed: %s", e)
+        return {
+            "aqi": None,
+            "category": "Error",
+            "pm25": None,
+            "color": "#8892aa",
+            "error": str(e)
+        }
+
+
 @app.get("/weather", tags=["Weather"])
 async def current_weather(lat: float, lon: float):
     """
@@ -1003,3 +1036,68 @@ async def fire_season_calendar():
         raise HTTPException(404, str(e))
     except Exception as e:
         raise HTTPException(500, f"Calendar computation failed: {e}")
+
+
+# ── Fire Spread Prediction ────────────────────────────────────────────────
+
+class SpreadRequest(BaseModel):
+    latitude:      float = Field(..., ge=32.0, le=42.0)
+    longitude:     float = Field(..., ge=-125.0, le=-114.0)
+    wind_speed_kmh: float = Field(20.0, ge=0, le=200)
+    wind_deg:      float = Field(0, ge=0, le=360)
+    risk_level:    str   = Field("MEDIUM", pattern="^(LOW|MEDIUM|HIGH)$")
+    acres_est:     int   = Field(1000, ge=0)
+
+
+@app.post("/spread-prediction", tags=["Fire Modeling"])
+async def predict_fire_spread(body: SpreadRequest):
+    """
+    Compute elliptical fire spread polygons for 6h, 12h, and 24h horizons.
+    
+    Fire spreads faster downwind and slower crosswind. Spread rate depends on
+    risk level and wind speed.
+    
+    Returns three polygons as lists of [lat, lng] coordinate pairs.
+    """
+    from api.spread import compute_spread_prediction
+    try:
+        return compute_spread_prediction(
+            latitude=body.latitude,
+            longitude=body.longitude,
+            wind_speed_kmh=body.wind_speed_kmh,
+            wind_deg=body.wind_deg,
+            risk_level=body.risk_level,
+            acres_est=body.acres_est,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Spread prediction failed: {e}")
+
+
+# ── Smoke Plume Trajectory ─────────────────────────────────────────────────
+
+class SmokePlumeRequest(BaseModel):
+    latitude:      float = Field(..., ge=32.0, le=42.0)
+    longitude:     float = Field(..., ge=-125.0, le=-114.0)
+    wind_deg:      float = Field(0, ge=0, le=360)
+    wind_speed_kmh: float = Field(20.0, ge=0, le=200)
+
+
+@app.post("/smoke-plume", tags=["Fire Modeling"])
+async def predict_smoke_plume(body: SmokePlumeRequest):
+    """
+    Compute cone-shaped smoke plume polygon extending 50km downwind.
+    
+    Plume is narrow at fire point (1km wide) and widens to 15km at 50km distance.
+    
+    Returns polygon as list of [lat, lng] coordinate pairs.
+    """
+    from api.spread import compute_smoke_plume
+    try:
+        return compute_smoke_plume(
+            latitude=body.latitude,
+            longitude=body.longitude,
+            wind_deg=body.wind_deg,
+            wind_speed_kmh=body.wind_speed_kmh,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Smoke plume computation failed: {e}")
