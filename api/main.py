@@ -27,6 +27,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from api.firms import get_active_fires
+from api.shap_explainer import compute_shap_values
 
 # Load .env from project root
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
@@ -189,6 +190,14 @@ async def predict(request: Request, body: PredictRequest):
         )
     else:
         result_dict['feature_importances'] = {}
+
+    # Compute SHAP per-prediction explanation
+    shap_explanation = None
+    try:
+        shap_explanation = compute_shap_values(predictor, body.model_dump())
+    except Exception as e:
+        log.warning("SHAP computation skipped: %s", e)
+    result_dict["shap_explanation"] = shap_explanation
 
     # Fetch weather and add to response
     weather_data = None
@@ -910,4 +919,87 @@ async def county_confidence():
 
     except Exception as e:
         raise HTTPException(500, f"Failed to compute county confidence: {e}")
+    
+# ---------------------------------------------------------------------------
+# Add these to api/main.py
+# ---------------------------------------------------------------------------
 
+# 1. Add import at top:
+# from api.shap_explainer import compute_shap_values
+
+# 2. Add this endpoint:
+
+@app.post("/explain", tags=["Explainability"])
+async def explain_prediction(body: PredictRequest):
+    """
+    Returns SHAP values for a single prediction.
+    Shows WHY the model classified this fire as HIGH/MEDIUM/LOW.
+
+    Returns:
+    - shap_values: per-feature contribution to the prediction
+    - top_positive: features pushing TOWARD the predicted class
+    - top_negative: features pushing AWAY from the predicted class
+    - base_value: baseline prediction before any features
+    - predicted_class: class being explained
+    """
+    if predictor is None:
+        raise HTTPException(503, "Model not loaded.")
+
+    # First get the prediction
+    try:
+        result = predictor.predict(body.dict())
+    except Exception as e:
+        raise HTTPException(500, f"Prediction failed: {e}")
+
+    # Then compute SHAP
+    shap_result = compute_shap_values(predictor, body.dict())
+
+    if shap_result is None:
+        raise HTTPException(500, "SHAP computation failed. Check logs.")
+
+    return {
+        "prediction":    result.to_dict(),
+        "explanation":   shap_result,
+        "input_features": body.dict(),
+    }
+
+
+# ── Prophet Forecast ──────────────────────────────────────────────────────
+
+@app.get("/forecast", tags=["Forecasting"])
+async def forecast_incidents(periods: int = 12):
+    """
+    Returns a 12-month forward forecast of wildfire incident counts
+    using Meta's Prophet time-series model.
+
+    Includes:
+    - historical: past monthly incident counts
+    - forecast:   future months with yhat, yhat_lower, yhat_upper
+    - seasonality: monthly risk index (0-100)
+    - trend_direction, peak_month
+    """
+    from api.prophet_forecast import get_forecast
+    try:
+        return get_forecast(periods=min(periods, 24))
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Forecast failed: {e}")
+
+
+# ── Fire Season Calendar ──────────────────────────────────────────────────
+
+@app.get("/fire-calendar", tags=["Forecasting"])
+async def fire_season_calendar():
+    """
+    Returns per-month fire risk scores (0-100) computed from historical data.
+    Each month includes: risk_score, risk_label, avg_incidents, avg_acres,
+    pct_high severity, and fire season identification.
+    """
+    from api.prophet_forecast import get_fire_calendar
+    try:
+        return get_fire_calendar()
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Calendar computation failed: {e}")

@@ -7,7 +7,8 @@ import FeatureImportance      from '../components/FeatureImportance';
 import ResourceRecommendation from '../components/ResourceRecommendation';
 import SendAlert              from '../components/SendAlert';
 import IncidentReport         from '../components/IncidentReport';
-import WeatherStrip from '../components/WeatherStrip';
+import WeatherStrip           from '../components/WeatherStrip';
+import ShapWaterfall          from '../components/ShapWaterfall';
 import axios from 'axios';
 
 const API = 'http://localhost:8000';
@@ -26,6 +27,7 @@ const TABS = [
   { key: 'risk',      label: '🎯 Risk'      },
   { key: 'resources', label: '🚒 Resources'  },
   { key: 'impact',    label: '🌿 Impact'     },
+  { key: 'explain',   label: '🧠 Explain'    },
 ];
 
 const RISK_COLOR = { HIGH: '#ff5722', MEDIUM: '#ffc107', LOW: '#00bf55' };
@@ -268,7 +270,8 @@ function ResultTabs({ result }) {
           </div>
         )}
 
-        {active === 'impact' && <CarbonImpact result={result} />}
+        {active === 'impact'   && <CarbonImpact result={result} />}
+        {active === 'explain'  && <ShapWaterfall result={result} />}
       </div>
     </div>
   );

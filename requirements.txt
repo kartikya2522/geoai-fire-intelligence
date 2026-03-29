@@ -14,3 +14,5 @@ Pillow
 anthropic
 httpx
 slowapi
+shap
+prophet

@@ -9,6 +9,8 @@ import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { fetchAnalytics, fetchModelInfo } from '../hooks/usePrediction';
 import CountyConfidence from '../components/CountyConfidence';
+import ForecastChart    from '../components/ForecastChart';
+import FireCalendar     from '../components/FireCalendar';
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, ArcElement,
@@ -338,6 +340,12 @@ export default function Analytics() {
         <Line data={yearChart} options={CHART_OPTS} />
       </ChartCard>
 
+      {/* Prophet 12-month forecast */}
+      <SectionTitle>12-Month Fire Incident Forecast</SectionTitle>
+      <ChartCard>
+        <ForecastChart />
+      </ChartCard>
+
       {/* Model comparison */}
       {modelNames.length > 0 && <>
         <SectionTitle>ML Model Comparison</SectionTitle>
@@ -372,6 +380,12 @@ export default function Analytics() {
           <InsightCard key={item.title} title={item.title} body={item.body} delay={i * 0.1} />
         ))}
       </div>
+      {/* Fire Season Risk Calendar */}
+      <SectionTitle>Fire Season Risk Calendar</SectionTitle>
+      <ChartCard>
+        <FireCalendar />
+      </ChartCard>
+
       {/* County Confidence Heatmap */}
       <SectionTitle>Model Confidence by County</SectionTitle>
       <CountyConfidence />
