@@ -1101,3 +1101,45 @@ async def predict_smoke_plume(body: SmokePlumeRequest):
         )
     except Exception as e:
         raise HTTPException(500, f"Smoke plume computation failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Alert subscription
+# ---------------------------------------------------------------------------
+class SubscribeRequest(BaseModel):
+    email:     str
+    latitude:  float
+    longitude: float
+    zip_code:  str = None
+
+
+@app.post("/subscribe-alerts", tags=["Alert"])
+async def subscribe_alerts(body: SubscribeRequest):
+    """
+    Subscribe to receive email alerts when HIGH severity fires are detected
+    within 50km of the specified location.
+    """
+    from api.database import add_subscription
+    
+    try:
+        subscription_id = add_subscription(
+            email=body.email,
+            lat=body.latitude,
+            lon=body.longitude,
+            zip_code=body.zip_code,
+        )
+        
+        return {
+            "success": True,
+            "message": "You will be alerted if a HIGH severity fire is detected within 50km of this location.",
+            "subscription_id": subscription_id,
+            "email": body.email,
+            "coordinates": {
+                "latitude": body.latitude,
+                "longitude": body.longitude,
+            },
+            "radius_km": 50,
+        }
+    except Exception as e:
+        log.error(f"Subscription failed: {e}")
+        raise HTTPException(500, f"Failed to create subscription: {e}")

@@ -27,7 +27,7 @@ DB_PATH      = PROJECT_ROOT / "data" / "geoai.db"
 # Initialise DB — create tables if they don't exist
 # ---------------------------------------------------------------------------
 def init_db() -> None:
-    """Create the predictions table if it doesn't exist."""
+    """Create the predictions and subscriptions tables if they don't exist."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
@@ -50,6 +50,18 @@ def init_db() -> None:
                 input_features  TEXT
             )
         """)
+        
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS subscriptions (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                email       TEXT    NOT NULL,
+                latitude    REAL    NOT NULL,
+                longitude   REAL    NOT NULL,
+                zip_code    TEXT,
+                created_at  TEXT    NOT NULL
+            )
+        """)
+        
         conn.commit()
     log.info("Database initialised at %s", DB_PATH)
 
@@ -142,3 +154,50 @@ def get_stats() -> dict[str, Any]:
         "medium_count": risk_counts.get("MEDIUM", 0),
         "low_count":    risk_counts.get("LOW", 0),
     }
+
+
+# ---------------------------------------------------------------------------
+# Alert subscriptions
+# ---------------------------------------------------------------------------
+def add_subscription(email: str, lat: float, lon: float, zip_code: str = None) -> int:
+    """
+    Add a new alert subscription.
+    Returns the new subscription ID.
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute("""
+            INSERT INTO subscriptions (email, latitude, longitude, zip_code, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            email,
+            lat,
+            lon,
+            zip_code,
+            datetime.utcnow().isoformat(),
+        ))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def get_nearby_subscriptions(lat: float, lon: float, radius_km: float) -> list[dict[str, Any]]:
+    """
+    Get all subscriptions within the specified radius using Haversine formula.
+    Returns a list of subscription records.
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        # Haversine formula in SQL
+        # Earth radius = 6371 km
+        rows = conn.execute("""
+            SELECT 
+                id, email, latitude, longitude, zip_code, created_at,
+                (6371 * acos(
+                    cos(radians(?)) * cos(radians(latitude)) *
+                    cos(radians(longitude) - radians(?)) +
+                    sin(radians(?)) * sin(radians(latitude))
+                )) AS distance_km
+            FROM subscriptions
+            WHERE distance_km <= ?
+        """, (lat, lon, lat, radius_km)).fetchall()
+    
+    return [dict(row) for row in rows]

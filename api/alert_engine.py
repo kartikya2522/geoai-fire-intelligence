@@ -631,14 +631,205 @@ def dispatch_alerts(prediction: dict) -> dict:
         return {
             "dispatched": False,
             "reason":     f"Risk is {prediction.get('risk_level')} — alerts only for HIGH",
-            "email": None, "sms": None,
+            "email": None, "sms": None, "subscribers": None,
         }
     log.info("HIGH risk — dispatching alerts...")
     # Generate ONE incident ID shared across all channels
     shared_id = _incident_id()
     prediction["_incident_id"] = shared_id   # injected so both functions use same ID
+    
+    # Send authority alerts
+    email_result = send_email_alert(prediction)
+    sms_result = send_sms_alert(prediction)
+    
+    # Send subscriber alerts
+    subscriber_result = _send_subscriber_alerts(prediction)
+    
     return {
         "dispatched": True,
-        "email": send_email_alert(prediction),
-        "sms":   send_sms_alert(prediction),
+        "email": email_result,
+        "sms": sms_result,
+        "subscribers": subscriber_result,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Subscriber alerts
+# ---------------------------------------------------------------------------
+def _send_subscriber_alerts(prediction: dict) -> dict:
+    """
+    Send simplified public alert emails to nearby subscribers.
+    This function never raises exceptions — failures are logged and returned.
+    """
+    from api.database import get_nearby_subscriptions
+    
+    if not GMAIL_SENDER or not GMAIL_PASSWORD:
+        return {"success": False, "sent_to": [], "error": "Gmail not configured", "skipped": True}
+    
+    feats = prediction.get("input_features", {})
+    lat = float(feats.get("Latitude", 39.0))
+    lng = float(feats.get("Longitude", -122.0))
+    
+    try:
+        subscribers = get_nearby_subscriptions(lat, lng, 50)
+    except Exception as e:
+        log.error(f"Failed to query subscribers: {e}")
+        return {"success": False, "sent_to": [], "error": f"Database query failed: {e}", "skipped": False}
+    
+    if not subscribers:
+        return {"success": True, "sent_to": [], "error": None, "skipped": True, "note": "No subscribers within 50km"}
+    
+    log.info(f"Found {len(subscribers)} subscriber(s) within 50km")
+    
+    risk = prediction.get("risk_level", "HIGH")
+    incident_id = prediction.get("_incident_id") or _incident_id()
+    acres = prediction.get("acres_est", 0)
+    
+    sent_to, errors = [], []
+    
+    for sub in subscribers:
+        try:
+            distance_km = round(sub["distance_km"], 1)
+            email = sub["email"]
+            
+            subject = f"⚠️ Wildfire Alert — {distance_km}km from Your Location"
+            
+            # Simplified public-facing HTML email
+            html = f"""<!DOCTYPE html><html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">
+
+<div style="max-width:600px;margin:0 auto;background:#fff;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+  
+  <!-- Header -->
+  <div style="background:linear-gradient(160deg,#0f172a 0%,#1e293b 100%);padding:32px 24px;text-align:center">
+    <div style="font-size:48px;margin-bottom:12px">🔥</div>
+    <h1 style="color:#ff5722;font-size:28px;margin:0 0 8px;font-weight:900">Wildfire Detected Near You</h1>
+    <div style="color:#cbd5e1;font-size:14px">GeoAI Forest Fire Intelligence System</div>
+  </div>
+  
+  <!-- Alert strip -->
+  <div style="background:#ff5722;padding:12px 20px;text-align:center">
+    <div style="color:#fff;font-size:16px;font-weight:700">⚠️ HIGH SEVERITY WILDFIRE — {distance_km}km FROM YOUR LOCATION</div>
+  </div>
+  
+  <div style="padding:24px 28px">
+    
+    <!-- Main message -->
+    <div style="background:#fef2f2;border-left:4px solid #ff5722;border-radius:0 8px 8px 0;padding:16px 20px;margin-bottom:20px">
+      <p style="margin:0;font-size:15px;color:#374151;line-height:1.7">
+        A wildfire has been detected <strong>{distance_km}km</strong> from your subscribed location in California.<br><br>
+        <strong>Risk Level: {risk}</strong><br>
+        <strong>Estimated Size: {acres:,} acres</strong>
+      </p>
+    </div>
+    
+    <!-- Actions -->
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px 20px;margin-bottom:20px">
+      <h3 style="margin:0 0 12px;font-size:14px;color:#1e40af;font-weight:700">What You Should Do:</h3>
+      <ul style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.8">
+        <li>Monitor local emergency services and official evacuation orders</li>
+        <li>Prepare a "go bag" with essential documents, medications, and supplies</li>
+        <li>Keep your phone charged and ready to receive emergency alerts</li>
+        <li>If you smell smoke or see flames, evacuate immediately and call 911</li>
+      </ul>
+    </div>
+    
+    <!-- Emergency links -->
+    <div style="margin-bottom:20px">
+      <h3 style="margin:0 0 10px;font-size:13px;color:#64748b;font-weight:700;text-transform:uppercase">Emergency Resources</h3>
+      <div style="display:grid;gap:8px">
+        <a href="https://www.redcross.org/get-help/disaster-relief-and-recovery-services/find-an-open-shelter.html" 
+           style="display:block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;
+                  text-decoration:none;color:#0891b2;font-weight:600;font-size:13px">
+          🏠 Find Emergency Shelters (Red Cross)
+        </a>
+        <a href="https://www.fire.ca.gov/" 
+           style="display:block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;
+                  text-decoration:none;color:#0891b2;font-weight:600;font-size:13px">
+          🔥 CAL FIRE Official Updates
+        </a>
+        <a href="https://www.airnow.gov/?city=&state=CA&country=USA" 
+           style="display:block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px 14px;
+                  text-decoration:none;color:#0891b2;font-weight:600;font-size:13px">
+          💨 Check Air Quality (AirNow)
+        </a>
+      </div>
+    </div>
+    
+    <!-- Emergency contacts -->
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin-bottom:20px">
+      <h3 style="margin:0 0 10px;font-size:13px;color:#64748b;font-weight:700;text-transform:uppercase">Emergency Contacts</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="border-bottom:1px solid #f1f5f9">
+          <td style="padding:6px 0;color:#374151">911 Emergency</td>
+          <td style="padding:6px 0;font-weight:700;color:#ff5722;text-align:right">911</td>
+        </tr>
+        <tr style="border-bottom:1px solid #f1f5f9">
+          <td style="padding:6px 0;color:#374151">CAL FIRE Emergency</td>
+          <td style="padding:6px 0;font-weight:700;color:#ff5722;text-align:right">1-800-468-4408</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0;color:#374151">Red Cross Disaster Relief</td>
+          <td style="padding:6px 0;font-weight:700;color:#ff5722;text-align:right">1-800-733-2767</td>
+        </tr>
+      </table>
+    </div>
+    
+    <!-- Footer note -->
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px 16px">
+      <p style="margin:0;font-size:11px;color:#64748b;line-height:1.6">
+        🔔 You are receiving this alert because you subscribed to wildfire notifications for this location.
+        This alert was generated by the GeoAI Forest Fire Risk Intelligence System.<br><br>
+        <strong>Incident ID:</strong> {incident_id}<br>
+        <strong>Detection Distance:</strong> {distance_km}km from your subscribed location<br><br>
+        This is an automated alert. Please monitor official emergency services for the latest information.
+      </p>
+    </div>
+    
+  </div>
+  
+  <!-- Footer -->
+  <div style="background:#0f172a;padding:16px 24px;text-align:center">
+    <p style="margin:0;color:#94a3b8;font-size:11px">
+      GeoAI Forest Fire Risk Intelligence System<br>
+      Incident {incident_id} &nbsp;•&nbsp; Powered by Machine Learning
+    </p>
+  </div>
+  
+</div>
+</body></html>"""
+
+            # Send email
+            try:
+                server = smtplib.SMTP("smtp.gmail.com", 587)
+                server.starttls()
+                server.login(GMAIL_SENDER, GMAIL_PASSWORD)
+                
+                msg = MIMEMultipart("alternative")
+                msg["Subject"] = subject
+                msg["From"] = f"GeoAI Fire Intelligence <{GMAIL_SENDER}>"
+                msg["To"] = email
+                msg.attach(MIMEText(html, "html"))
+                
+                server.sendmail(GMAIL_SENDER, email, msg.as_string())
+                server.quit()
+                
+                sent_to.append(email)
+                log.info(f"Subscriber alert sent → {email} (distance: {distance_km}km)")
+                
+            except Exception as email_err:
+                log.error(f"Failed to send to subscriber {email}: {email_err}")
+                errors.append(f"{email}: {email_err}")
+                
+        except Exception as sub_err:
+            log.error(f"Error processing subscriber {sub.get('email', 'unknown')}: {sub_err}")
+            errors.append(f"{sub.get('email', 'unknown')}: {sub_err}")
+    
+    return {
+        "success": len(sent_to) > 0,
+        "sent_to": sent_to,
+        "error": "; ".join(errors) if errors else None,
+        "skipped": False,
+        "total_subscribers": len(subscribers),
     }
