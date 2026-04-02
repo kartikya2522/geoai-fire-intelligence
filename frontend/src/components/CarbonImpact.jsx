@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
+import axios from 'axios';
 
 /*
   Science-backed constants:
@@ -133,6 +134,7 @@ export default function CarbonImpact({ result }) {
   const tile2    = useRef(null);
   const tile3    = useRef(null);
   const tile4    = useRef(null);
+  const [damageEstimate, setDamageEstimate] = useState(null);
 
   if (!result) return null;
 
@@ -146,6 +148,24 @@ export default function CarbonImpact({ result }) {
 
   // Years to offset if we plant treesDestroyed trees
   const yearsToOffset  = Math.round(co2Tonnes / ((treesDestroyed * KG_CO2_PER_TREE_YR) / 1000));
+
+  // Fetch damage estimate
+  useEffect(() => {
+    const fetchDamageEstimate = async () => {
+      try {
+        const { data } = await axios.get('http://localhost:8000/damage-estimate', {
+          params: {
+            risk_level: result.risk_level,
+            acres_est: acres,
+          },
+        });
+        setDamageEstimate(data);
+      } catch (e) {
+        console.warn('Damage estimate fetch failed:', e);
+      }
+    };
+    fetchDamageEstimate();
+  }, [result.risk_level, acres]);
 
   useEffect(() => {
     if (!wrapRef.current) return;
@@ -236,6 +256,92 @@ export default function CarbonImpact({ result }) {
         preventionCost={preventionCost}
         reforestCost={reforestCost}
       />
+
+      {/* Economic Impact Estimate (TASK 3) */}
+      {damageEstimate && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{
+            fontSize: 11, color: 'var(--text-muted)',
+            fontFamily: 'var(--font-display)', letterSpacing: '0.08em',
+            textTransform: 'uppercase', marginBottom: 12,
+          }}>
+            Economic Impact Estimate
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{
+              padding: '16px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(255,87,34,0.08)',
+              border: '1px solid rgba(255,87,34,0.2)',
+              minWidth: 0,
+              overflow: 'hidden',
+              wordBreak: 'break-word',
+            }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Suppression Cost</div>
+              <div style={{
+                fontFamily: 'var(--font-display)', fontWeight: 800,
+                fontSize: 22, color: '#ff5722', letterSpacing: '-0.02em',
+              }}>{formatCost(damageEstimate.suppression_cost_usd)}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                $1,200/acre × {acres.toLocaleString()} acres
+              </div>
+            </div>
+
+            <div style={{
+              padding: '16px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(239,68,68,0.08)',
+              border: '1px solid rgba(239,68,68,0.2)',
+              minWidth: 0,
+              overflow: 'hidden',
+              wordBreak: 'break-word',
+            }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Property Damage Range</div>
+              <div style={{
+                fontFamily: 'var(--font-display)', fontWeight: 800,
+                fontSize: 18, color: '#ef4444', letterSpacing: '-0.02em',
+              }}>
+                <div>{formatCost(damageEstimate.property_damage_low)}</div>
+                <div>{formatCost(damageEstimate.property_damage_high)}</div>
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                {result.risk_level} risk area
+              </div>
+            </div>
+
+            <div style={{
+              padding: '16px',
+              borderRadius: 'var(--radius-md)',
+              background: 'rgba(249,115,22,0.08)',
+              border: '1px solid rgba(249,115,22,0.2)',
+              gridColumn: '1 / -1',
+            }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Total Economic Impact (Mid)</div>
+              <div style={{
+                fontFamily: 'var(--font-display)', fontWeight: 800,
+                fontSize: 28, color: '#f97316', letterSpacing: '-0.03em',
+              }}>{formatCost(damageEstimate.total_economic_impact_mid)}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
+                Suppression + Property Damage (mid estimate)
+              </div>
+            </div>
+          </div>
+
+          <div style={{
+            marginTop: 12,
+            padding: '10px 14px',
+            background: 'rgba(234,179,8,0.08)',
+            border: '1px solid rgba(234,179,8,0.2)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5,
+          }}>
+            💡 Based on CAL FIRE historical averages: Suppression $1,200/acre,
+            Property damage varies by risk level (LOW: $5K, MEDIUM: $12K, HIGH: $25K per acre).
+            These are estimates — actual costs vary widely based on terrain, structures, and response effectiveness.
+          </div>
+        </div>
+      )}
 
       {/* Science footnote */}
       <div style={{

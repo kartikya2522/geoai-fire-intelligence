@@ -48,6 +48,9 @@ export default function WildfireMap() {
   const [showSmoke,         setShowSmoke]         = useState(false);
   const smokePlumeLayerRef  = useRef(null);
   const [weatherData,       setWeatherData]       = useState(null);
+  const [evacuationRoutes,  setEvacuationRoutes]  = useState(null);
+  const [showEvacuation,    setShowEvacuation]    = useState(false);
+  const evacuationLayersRef = useRef([]);
 
   /* Read URL params — set by RiskCard "View on Map" button */
   const paramLat   = parseFloat(searchParams.get('lat'))   || null;
@@ -151,6 +154,9 @@ export default function WildfireMap() {
     map.flyTo([lat, lng], 8, { duration: 1.4, easeLinearity: 0.3 });
     setZoneInfo({ lat, lng, risk, acres });
 
+    // Fetch evacuation routes
+    fetchEvacuationRoutes(lat, lng);
+
     // Fetch weather data for spread/smoke predictions
     try {
       const { data: weather } = await axios.get(`${API}/weather`, { params: { lat, lon: lng } });
@@ -197,6 +203,19 @@ export default function WildfireMap() {
       setShowSmoke(true);
     } catch (e) {
       console.warn('Smoke plume fetch failed:', e);
+    }
+  };
+
+  /* ── Fetch evacuation routes ──────────────────────────────────── */
+  const fetchEvacuationRoutes = async (lat, lng) => {
+    try {
+      const { data } = await axios.get(`${API}/evacuation-routes`, {
+        params: { lat, lon: lng },
+      });
+      setEvacuationRoutes(data);
+      setShowEvacuation(true);
+    } catch (e) {
+      console.warn('Evacuation routes fetch failed:', e);
     }
   };
 
@@ -482,6 +501,63 @@ export default function WildfireMap() {
     smokePlumeLayerRef.current = plume;
   }, [smokePlume, showSmoke]);
 
+  /* ── Render evacuation routes ──────────────────────────────── */
+  useEffect(() => {
+    if (!leafletRef.current) return;
+    const { L, map } = leafletRef.current;
+
+    // Clear existing routes
+    evacuationLayersRef.current.forEach(l => l.remove());
+    evacuationLayersRef.current = [];
+
+    if (!showEvacuation || !evacuationRoutes?.routes) return;
+
+    evacuationRoutes.routes.forEach(route => {
+      // Draw route polyline
+      const polyline = L.polyline(route.coordinates, {
+        color: '#00ff88',
+        weight: 3,
+        opacity: 0.85,
+      }).addTo(map);
+
+      polyline.bindTooltip(
+        `<div style="font-family:'DM Sans',sans-serif;font-size:11px">
+          <div style="color:#00ff88;font-weight:700;margin-bottom:3px">→ ${route.city}</div>
+          <div style="color:#8892aa">
+            ${route.distance_km} km • ${route.duration_min} min
+            ${route.fallback ? '<br><span style="color:#ffc107;font-size:10px">⚠ Straight-line estimate</span>' : ''}
+          </div>
+        </div>`,
+        { permanent: false, direction: 'top' }
+      );
+
+      evacuationLayersRef.current.push(polyline);
+
+      // Add city marker at endpoint
+      const cityMarker = L.circleMarker([route.city_lat, route.city_lon], {
+        radius: 8,
+        color: '#00ff88',
+        fillColor: '#00ff88',
+        fillOpacity: 0.7,
+        weight: 2,
+      }).addTo(map);
+
+      cityMarker.bindPopup(`
+        <div style="font-family:'DM Sans',sans-serif;color:#f0f4ff;min-width:150px">
+          <div style="font-weight:700;font-size:13px;color:#00ff88;margin-bottom:6px">
+            📍 ${route.city}
+          </div>
+          <div style="font-size:11px;color:#8892aa">
+            Distance: ${route.distance_km} km<br>
+            Est. Time: ${route.duration_min} minutes
+          </div>
+        </div>
+      `, { className: 'fire-popup' });
+
+      evacuationLayersRef.current.push(cityMarker);
+    });
+  }, [evacuationRoutes, showEvacuation]);
+
   /* ── Popup styles ─────────────────────────────────────────── */
   useEffect(() => {
     const style = document.createElement('style');
@@ -652,6 +728,20 @@ export default function WildfireMap() {
               💨 Smoke
             </button>
           )}
+          {/* Evacuation toggle */}
+          {firebreakActive && (
+            <button onClick={() => setShowEvacuation(e => !e)} style={{
+              padding: '5px 12px', borderRadius: 'var(--radius-sm)',
+              border: `1px solid ${showEvacuation ? '#00ff88' : 'var(--glass-border)'}`,
+              background: showEvacuation ? 'rgba(0,255,136,0.15)' : 'transparent',
+              color: showEvacuation ? '#00ff88' : 'var(--text-muted)',
+              fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              fontFamily: 'var(--font-display)', letterSpacing: '0.06em',
+              transition: 'var(--transition)',
+            }}>
+              🟢 Evacuation
+            </button>
+          )}
           {/* Satellite toggle */}
           <button onClick={() => setShowSatellite(s => !s)} style={{
             padding: '5px 12px', borderRadius: 'var(--radius-sm)',
@@ -755,6 +845,12 @@ export default function WildfireMap() {
               <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
                 💨 Smoke Plume (50km)
               </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <svg width="20" height="4">
+                <line x1="0" y1="2" x2="20" y2="2" stroke="#00ff88" strokeWidth="3"/>
+              </svg>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>🟢 Evacuation Routes</span>
             </div>
           </>
         )}

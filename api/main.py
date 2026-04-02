@@ -1143,3 +1143,264 @@ async def subscribe_alerts(body: SubscribeRequest):
     except Exception as e:
         log.error(f"Subscription failed: {e}")
         raise HTTPException(500, f"Failed to create subscription: {e}")
+
+
+# ---------------------------------------------------------------------------
+# TASK 1: Evacuation Route Generator
+# ---------------------------------------------------------------------------
+@app.get("/evacuation-routes", tags=["Decision Support"])
+async def evacuation_routes(lat: float, lon: float):
+    """
+    Compute evacuation routes from fire location to 3 nearest major California cities
+    (Sacramento, San Francisco, Fresno) using OpenRouteService Directions API.
+    
+    Returns decoded polyline coordinates for each route plus distance and duration.
+    Falls back to straight-line routes if ORS_API_KEY is not configured.
+    """
+    from api.evacuation import compute_evacuation_routes
+    
+    try:
+        return compute_evacuation_routes(lat, lon)
+    except Exception as e:
+        log.error(f"Evacuation route computation failed: {e}")
+        raise HTTPException(500, f"Failed to compute evacuation routes: {e}")
+
+
+# ---------------------------------------------------------------------------
+# TASK 2: Mutual Aid Request Generator
+# ---------------------------------------------------------------------------
+@app.get("/mutual-aid-request", tags=["Decision Support"])
+async def mutual_aid_request(
+    risk_level: str,
+    acres_est: int,
+    county: str = "Unknown County",
+    personnel: int = 0,
+    engines: int = 0,
+    helicopters: int = 0,
+    incident_id: str = None,
+):
+    """
+    Generate a NIMS ICS-213 Mutual Aid Request formatted document.
+    
+    Returns plain text document with:
+    - Requesting agency info
+    - Incident details
+    - Resource gap analysis (deployed vs NIMS recommended)
+    - Justification based on risk level
+    - Contact info and authorization placeholders
+    """
+    from datetime import datetime
+    import random
+    import string
+    
+    # Generate incident ID if not provided
+    if not incident_id:
+        suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
+        incident_id = f"CA-{datetime.now().strftime('%Y%m%d')}-{suffix}"
+    
+    # NIMS resource standards
+    nims_standards = {
+        "HIGH": {
+            "Personnel": 700,
+            "Engines": 70,
+            "Helicopters": 14,
+            "Dozers": 10,
+            "WaterTenders": 18,
+        },
+        "MEDIUM": {
+            "Personnel": 200,
+            "Engines": 28,
+            "Helicopters": 5,
+            "Dozers": 4,
+            "WaterTenders": 7,
+        },
+        "LOW": {
+            "Personnel": 50,
+            "Engines": 8,
+            "Helicopters": 1,
+            "Dozers": 1,
+            "WaterTenders": 2,
+        },
+    }
+    
+    nims = nims_standards.get(risk_level.upper(), nims_standards["HIGH"])
+    
+    # Calculate gaps
+    personnel_gap = max(0, nims["Personnel"] - personnel)
+    engines_gap = max(0, nims["Engines"] - engines)
+    helicopters_gap = max(0, nims["Helicopters"] - helicopters)
+    
+    # Generate justification based on risk level
+    justifications = {
+        "HIGH": (
+            f"This incident has been classified as HIGH SEVERITY with an estimated {acres_est:,} acres "
+            f"at risk. Current containment efforts are insufficient to meet NIMS Type 1 standards. "
+            f"Immediate mutual aid is required to prevent further escalation. The fire poses a "
+            f"significant threat to life, property, and critical infrastructure in {county}. "
+            f"Without additional resources within the next operational period, the incident "
+            f"is expected to exceed local and regional response capacity."
+        ),
+        "MEDIUM": (
+            f"This incident is classified as MEDIUM SEVERITY affecting an estimated {acres_est:,} acres "
+            f"in {county}. Current resources are below NIMS Type 3 extended attack standards. "
+            f"Additional mutual aid assets are needed to achieve effective containment and prevent "
+            f"escalation to Type 1. The incident requires multi-agency coordination and sustained "
+            f"air support to manage spread and protect exposed communities."
+        ),
+        "LOW": (
+            f"This incident is classified as LOW SEVERITY with {acres_est:,} acres estimated. "
+            f"While initial attack resources are deployed, additional support is requested to ensure "
+            f"rapid containment and prevent growth. Mutual aid will allow for faster mop-up and "
+            f"release of local resources back to normal operations."
+        ),
+    }
+    
+    justification = justifications.get(risk_level.upper(), justifications["HIGH"])
+    
+    # Format the ICS-213 document
+    timestamp = datetime.now().strftime("%B %d, %Y at %H:%M hours")
+    
+    document = f"""
+═══════════════════════════════════════════════════════════════════════════
+                          ICS-213 MUTUAL AID REQUEST
+                   NATIONAL INCIDENT MANAGEMENT SYSTEM (NIMS)
+═══════════════════════════════════════════════════════════════════════════
+
+INCIDENT NAME:          {incident_id}
+DATE/TIME:              {timestamp}
+REQUESTING AGENCY:      GeoAI Fire Intelligence System / CAL FIRE
+COUNTY:                 {county}
+RISK LEVEL:             {risk_level.upper()}
+ESTIMATED AREA:         {acres_est:,} acres
+
+───────────────────────────────────────────────────────────────────────────
+RESOURCE REQUEST SUMMARY
+───────────────────────────────────────────────────────────────────────────
+
+Based on NIMS {risk_level.upper()} incident standards, the following resources
+are requested for immediate deployment:
+
+Resource Type          Deployed    NIMS Minimum    Gap/Shortfall
+─────────────────────────────────────────────────────────────────────────
+Personnel              {personnel:>8}    {nims['Personnel']:>12}    {personnel_gap:>13}
+Fire Engines           {engines:>8}    {nims['Engines']:>12}    {engines_gap:>13}
+Helicopters            {helicopters:>8}    {nims['Helicopters']:>12}    {helicopters_gap:>13}
+
+───────────────────────────────────────────────────────────────────────────
+REQUESTED RESOURCES (Priority Order)
+───────────────────────────────────────────────────────────────────────────
+
+1. Type 1 Hand Crews                {personnel_gap // 20} crews (20 personnel each)
+2. Type 1 Fire Engines              {engines_gap} units
+3. Type 1 Helicopters               {helicopters_gap} units
+4. Strike Team Leader (Engines)     1 unit
+5. Air Operations Branch Director   1 unit (if helicopters requested)
+
+───────────────────────────────────────────────────────────────────────────
+JUSTIFICATION
+───────────────────────────────────────────────────────────────────────────
+
+{justification}
+
+───────────────────────────────────────────────────────────────────────────
+LOGISTICS & REPORTING INSTRUCTIONS
+───────────────────────────────────────────────────────────────────────────
+
+Requested Resources Report To:  Incident Command Post, {county}
+Check-In Location:               To be provided upon resource confirmation
+Operational Period:              Next 24 hours, renewable
+Resource Order Number:           {incident_id}-RES-001
+
+All responding resources must check in at the designated ICP before proceeding
+to the fire line. Resources should be prepared for extended deployment and
+bring sufficient supplies for 72 hours of self-sufficiency.
+
+───────────────────────────────────────────────────────────────────────────
+AUTHORIZATION
+───────────────────────────────────────────────────────────────────────────
+
+Requesting Official:    ________________________________
+                       (Incident Commander / Authorized Representative)
+
+Contact Number:         1-800-468-4408 (CAL FIRE Emergency)
+Email:                  incident.{incident_id.lower()}@fire.ca.gov
+
+Approved By:           ________________________________
+                       (Agency Administrator / Authorized Representative)
+
+Date/Time:             ________________________________
+
+───────────────────────────────────────────────────────────────────────────
+FOR OFFICIAL USE ONLY
+
+This request is generated by the GeoAI Forest Fire Risk Intelligence System
+based on predictive risk classification and NIMS resource typing standards.
+Final approval and resource allocation decisions rest with authorized
+incident management personnel and mutual aid coordinators.
+
+Document ID: {incident_id}-ICS213-MUTUALAID
+Generated: {timestamp}
+═══════════════════════════════════════════════════════════════════════════
+    """.strip()
+    
+    return {
+        "request_text": document,
+        "incident_id": incident_id,
+        "risk_level": risk_level.upper(),
+        "resource_gaps": {
+            "personnel": personnel_gap,
+            "engines": engines_gap,
+            "helicopters": helicopters_gap,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# TASK 3: Insurance Damage Estimator
+# ---------------------------------------------------------------------------
+@app.get("/damage-estimate", tags=["Decision Support"])
+async def damage_estimate(risk_level: str, acres_est: int):
+    """
+    Estimate economic impact based on CAL FIRE historical averages:
+    - Suppression cost: ~$1,200/acre
+    - Property damage varies by risk level:
+      - LOW: $5,000/acre
+      - MEDIUM: $12,000/acre  
+      - HIGH: $25,000/acre
+    
+    Returns low/mid/high estimates for property damage and total economic impact.
+    """
+    # CAL FIRE historical averages
+    SUPPRESSION_COST_PER_ACRE = 1200
+    
+    PROPERTY_DAMAGE_PER_ACRE = {
+        "LOW": 5000,
+        "MEDIUM": 12000,
+        "HIGH": 25000,
+    }
+    
+    base_property_damage = PROPERTY_DAMAGE_PER_ACRE.get(
+        risk_level.upper(),
+        PROPERTY_DAMAGE_PER_ACRE["HIGH"]
+    )
+    
+    # Calculate estimates
+    suppression_cost = acres_est * SUPPRESSION_COST_PER_ACRE
+    
+    # Property damage range (±30% for uncertainty)
+    property_damage_low = int(acres_est * base_property_damage * 0.7)
+    property_damage_mid = int(acres_est * base_property_damage)
+    property_damage_high = int(acres_est * base_property_damage * 1.3)
+    
+    total_economic_impact_mid = suppression_cost + property_damage_mid
+    
+    return {
+        "risk_level": risk_level.upper(),
+        "acres_est": acres_est,
+        "suppression_cost_usd": suppression_cost,
+        "property_damage_low": property_damage_low,
+        "property_damage_mid": property_damage_mid,
+        "property_damage_high": property_damage_high,
+        "total_economic_impact_mid": total_economic_impact_mid,
+        "methodology": "Based on CAL FIRE historical suppression and property damage averages",
+    }

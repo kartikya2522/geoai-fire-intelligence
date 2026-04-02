@@ -413,31 +413,78 @@ def send_email_alert(prediction: dict) -> dict:
       </table>
     </div>
 
-    <!-- 7. Bilingual Resident Instructions — UNIQUE FEATURE -->
-    {_section_header("&#128101;", "Residents — What To Do Now / Residentes — Qué Hacer Ahora", color)}
+    <!-- 7. Multi-language Resident Instructions — UNIQUE FEATURE (EN/ES/TL/HMN) -->
+    {_section_header("&#128101;", "Residents — What To Do Now (4 Languages)", color)}
     <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;margin-bottom:8px">
-      <!-- English -->
-      <div style="font-size:11px;font-weight:700;color:#1e40af;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">
-        &#127468;&#127463; English
-      </div>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:14px">
-        {_action("&#127939;", f"<strong>EVACUATE IMMEDIATELY</strong> if within {evac_km}km of fire location")}
-        {_action("&#128663;", "Take documents, medications, phone charger, water, and pets")}
-        {_action("&#128567;", "Wear N95 mask — wildfire smoke is dangerous for all, especially children and elderly")}
-        {_action("&#128205;", "Register at your shelter so authorities know you are safe")}
+      
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <!-- English -->
+          <td style="width:25%;vertical-align:top;padding-right:8px;border-right:1px solid #bfdbfe">
+            <div style="font-size:10px;font-weight:700;color:#1e40af;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">
+              &#127468;&#127463; English
+            </div>
+            <table style="width:100%;border-collapse:collapse">
+              {_action("&#10003;", "Evacuate immediately", "#374151")}
+              {_action("&#10003;", "Contact family members", "#374151")}
+              {_action("&#10003;", "Bring important documents", "#374151")}
+              {_action("&#10003;", "Follow official evacuation routes", "#374151")}
+              {_action("&#10003;", "Do not return to fire area", "#374151")}
+              {_action("&#10003;", "Find the nearest shelter", "#374151")}
+              {_action("&#10003;", "Call 911 for help", "#374151")}
+            </table>
+          </td>
+          
+          <!-- Spanish -->
+          <td style="width:25%;vertical-align:top;padding:0 8px;border-right:1px solid #bfdbfe">
+            <div style="font-size:10px;font-weight:700;color:#1e40af;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">
+              &#127466;&#127480; Espa&#241;ol
+            </div>
+            <table style="width:100%;border-collapse:collapse">
+              {_action("&#10003;", "Ev&#225;cue inmediatamente", "#374151")}
+              {_action("&#10003;", "Contacte a familiares", "#374151")}
+              {_action("&#10003;", "Lleve documentos importantes", "#374151")}
+              {_action("&#10003;", "Siga rutas oficiales", "#374151")}
+              {_action("&#10003;", "No regrese al &#225;rea", "#374151")}
+              {_action("&#10003;", "Encuentre refugio cercano", "#374151")}
+              {_action("&#10003;", "Llame al 911", "#374151")}
+            </table>
+          </td>
+          
+          <!-- Tagalog -->
+          <td style="width:25%;vertical-align:top;padding:0 8px;border-right:1px solid #bfdbfe">
+            <div style="font-size:10px;font-weight:700;color:#1e40af;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">
+              &#127477;&#127468; Tagalog
+            </div>
+            <table style="width:100%;border-collapse:collapse">
+              {_action("&#10003;", "Lumayas kaagad", "#374151")}
+              {_action("&#10003;", "Makipag-ugnayan sa pamilya", "#374151")}
+              {_action("&#10003;", "Magdala ng dokumento", "#374151")}
+              {_action("&#10003;", "Sundin ang opisyal na ruta", "#374151")}
+              {_action("&#10003;", "Huwag bumalik sa sunog", "#374151")}
+              {_action("&#10003;", "Hanapin ang kanlungan", "#374151")}
+              {_action("&#10003;", "Tumawag sa 911", "#374151")}
+            </table>
+          </td>
+          
+          <!-- Hmong -->
+          <td style="width:25%;vertical-align:top;padding-left:8px">
+            <div style="font-size:10px;font-weight:700;color:#1e40af;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">
+              Hmong
+            </div>
+            <table style="width:100%;border-collapse:collapse">
+              {_action("&#10003;", "Khiav tawm tam sim no", "#374151")}
+              {_action("&#10003;", "Hu rau tsev neeg", "#374151")}
+              {_action("&#10003;", "Nqa cov ntaub ntawv", "#374151")}
+              {_action("&#10003;", "Ua raws txoj kev tawm", "#374151")}
+              {_action("&#10003;", "Tsis txhob rov qab mus", "#374151")}
+              {_action("&#10003;", "Nrhiav chaw nyob", "#374151")}
+              {_action("&#10003;", "Hu 911 pab", "#374151")}
+            </table>
+          </td>
+        </tr>
       </table>
-      <!-- Spanish -->
-      <div style="border-top:1px solid #bfdbfe;padding-top:12px">
-        <div style="font-size:11px;font-weight:700;color:#1e40af;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">
-          &#127466;&#127480; Espa&#241;ol
-        </div>
-        <table style="width:100%;border-collapse:collapse">
-          {_action("&#127939;", f"<strong>EV&#193;CUE INMEDIATAMENTE</strong> si est&#225; a {evac_km}km del incendio")}
-          {_action("&#128663;", "Lleve documentos, medicamentos, cargador, agua y mascotas")}
-          {_action("&#128567;", "Use mascarilla N95 — el humo es peligroso, especialmente para ni&#241;os y ancianos")}
-          {_action("&#128205;", "Reg&#237;strese en el refugio para que las autoridades sepan que est&#225; a salvo")}
-        </table>
-      </div>
+      
     </div>
     <div style="background:#fef9c3;border:1px solid #fbbf24;border-radius:6px;padding:10px 14px;margin-bottom:24px">
       <table style="width:100%;border-collapse:collapse">

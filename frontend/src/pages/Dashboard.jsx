@@ -9,6 +9,7 @@ import SendAlert              from '../components/SendAlert';
 import IncidentReport         from '../components/IncidentReport';
 import WeatherStrip           from '../components/WeatherStrip';
 import ShapWaterfall          from '../components/ShapWaterfall';
+import MutualAidRequest       from '../components/MutualAidRequest';
 import axios from 'axios';
 
 const API = 'http://localhost:8000';
@@ -267,6 +268,7 @@ function ResultTabs({ result }) {
             <FeatureImportance result={result} />
             <div style={{ height: 1, background: 'var(--glass-border)' }}/>
             <ResourceRecommendation result={result} />
+            <MutualAidRequest result={result} />
           </div>
         )}
 
