@@ -15,16 +15,18 @@ const CO2_PER_ACRE        = 200;      // tonnes
 const TREES_PER_ACRE      = 150;      // count
 const KG_CO2_PER_TREE_YR  = 22;       // kg/year per tree
 const REFOREST_COST_ACRE  = 400;      // USD per acre
-const SUPPRESSION_COST    = 1000;     // USD per acre
+const SUPPRESSION_COST    = 1363;     // CAL FIRE 2022 Strategic Plan, Table 4-1
 const PREVENTION_COST     = 50;       // USD per acre saved (early response)
 
 function formatNum(n) {
+  if (n == null || isNaN(n) || !isFinite(n)) return '—';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
   if (n >= 1_000)     return (n / 1_000).toFixed(1)     + 'K';
   return Math.round(n).toLocaleString();
 }
 
 function formatCost(n) {
+  if (n == null || isNaN(n) || !isFinite(n)) return '—';
   if (n >= 1_000_000_000) return '$' + (n / 1_000_000_000).toFixed(1) + 'B';
   if (n >= 1_000_000)     return '$' + (n / 1_000_000).toFixed(1)     + 'M';
   if (n >= 1_000)         return '$' + (n / 1_000).toFixed(0)         + 'K';
@@ -203,7 +205,8 @@ export default function CarbonImpact({ result }) {
   const suppressCost   = acres * SUPPRESSION_COST;
 
   // Years to offset if we plant treesDestroyed trees
-  const yearsToOffset  = Math.round(co2Tonnes / ((treesDestroyed * KG_CO2_PER_TREE_YR) / 1000));
+  const treesPerYear = (treesDestroyed * KG_CO2_PER_TREE_YR) / 1000;
+  const yearsToOffset = treesPerYear > 0 ? Math.round(co2Tonnes / treesPerYear) : 0;
 
   // Fetch damage estimate
   useEffect(() => {

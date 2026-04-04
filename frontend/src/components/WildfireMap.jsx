@@ -822,7 +822,7 @@ export default function WildfireMap() {
         {/* NIMS Resource Gap Alert */}
         {(() => {
           // Only show when firebreak active, zoneInfo exists, and resource data is available
-          if (!firebreakActive || !zoneInfo || !paramPersonnel || !paramEngines || !paramHelicopters) return null;
+          if (!firebreakActive || !zoneInfo || (paramPersonnel === 0 && paramEngines === 0 && paramHelicopters === 0)) return null;
 
           const NIMS_STANDARDS = {
             HIGH:   { personnel: 700, engines: 70, helicopters: 14 },
