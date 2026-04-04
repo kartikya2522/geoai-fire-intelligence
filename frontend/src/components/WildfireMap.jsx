@@ -57,6 +57,9 @@ export default function WildfireMap() {
   const paramLng   = parseFloat(searchParams.get('lng'))   || null;
   const paramRisk  = searchParams.get('risk')              || null;
   const paramAcres = parseInt(searchParams.get('acres'))   || null;
+  const paramPersonnel   = parseInt(searchParams.get('personnel'))   || 0;
+  const paramEngines     = parseInt(searchParams.get('engines'))     || 0;
+  const paramHelicopters = parseInt(searchParams.get('helicopters')) || 0;
 
   const hasPrediction = paramLat && paramLng && paramRisk;
 
@@ -163,10 +166,10 @@ export default function WildfireMap() {
       setWeatherData(weather);
 
       // Auto-fetch spread and smoke predictions
-      if (weather?.wind_speed_kmh && weather?.wind_deg) {
-        fetchSpreadPrediction(lat, lng, weather.wind_speed_kmh, weather.wind_deg, risk, acres);
-        fetchSmokePlume(lat, lng, weather.wind_deg, weather.wind_speed_kmh);
-      }
+      const windSpeed = weather?.wind_speed_kmh || 15;
+      const windDeg = weather?.wind_deg || 270;
+      fetchSpreadPrediction(lat, lng, windSpeed, windDeg, risk, acres);
+      fetchSmokePlume(lat, lng, windDeg, windSpeed);
     } catch (e) {
       console.warn('Weather fetch failed:', e);
     }
@@ -522,10 +525,10 @@ export default function WildfireMap() {
 
       polyline.bindTooltip(
         `<div style="font-family:'DM Sans',sans-serif;font-size:11px">
-          <div style="color:#00ff88;font-weight:700;margin-bottom:3px">→ ${route.city}</div>
+          <div style="color:#00ff88;font-weight:700;margin-bottom:3px">🚗 Evacuate to ${route.city}</div>
           <div style="color:#8892aa">
-            ${route.distance_km} km • ${route.duration_min} min
-            ${route.fallback ? '<br><span style="color:#ffc107;font-size:10px">⚠ Straight-line estimate</span>' : ''}
+            ${route.distance_km} km • ~${route.duration_min} min drive
+            ${route.fallback ? '<br><span style="color:#ffc107;font-size:10px">⚠ Estimated route</span>' : ''}
           </div>
         </div>`,
         { permanent: false, direction: 'top' }
@@ -545,11 +548,11 @@ export default function WildfireMap() {
       cityMarker.bindPopup(`
         <div style="font-family:'DM Sans',sans-serif;color:#f0f4ff;min-width:150px">
           <div style="font-weight:700;font-size:13px;color:#00ff88;margin-bottom:6px">
-            📍 ${route.city}
+            🏙 Safe Zone: ${route.city}
           </div>
           <div style="font-size:11px;color:#8892aa">
-            Distance: ${route.distance_km} km<br>
-            Est. Time: ${route.duration_min} minutes
+            Distance from fire: ${route.distance_km} km<br>
+            Estimated drive: ${route.duration_min} min
           </div>
         </div>
       `, { className: 'fire-popup' });
@@ -580,17 +583,43 @@ export default function WildfireMap() {
 
   /* ── Clear zones handler ──────────────────────────────────── */
   const clearZones = () => {
+    // Remove zone circles
     zoneLayersRef.current.forEach(l => l.remove());
     zoneLayersRef.current = [];
+
+    // Remove spread
+    spreadLayersRef.current.forEach(l => l.remove());
+    spreadLayersRef.current = [];
+    setSpreadPolygons(null);
+    setShowSpread(false);
+
+    // Remove smoke
+    if (smokePlumeLayerRef.current) {
+      smokePlumeLayerRef.current.remove();
+      smokePlumeLayerRef.current = null;
+    }
+    setSmokePlume(null);
+    setShowSmoke(false);
+
+    // Remove evacuation routes
+    if (evacuationLayersRef.current) {
+      evacuationLayersRef.current.forEach(l => l.remove());
+      evacuationLayersRef.current = [];
+    }
+    setEvacuationRoutes(null);
+    setShowEvacuation(false);
+
+    // Reset state
     setFirebreakActive(false);
     setZoneInfo(null);
+
     if (leafletRef.current?.map) {
       leafletRef.current.map.flyTo([37.5, -119.5], 6, { duration: 1.2 });
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* Firebreak zone info banner */}
       {firebreakActive && zoneInfo && (
@@ -615,9 +644,14 @@ export default function WildfireMap() {
               ))}
             </div>
           </div>
-          <button onClick={clearZones} className="btn-ghost" style={{ padding: '5px 12px', fontSize: 12 }}>
-            Clear zones
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              {firebreakActive ? 'Firebreak zones drawn from prediction ↓' : ''}
+            </span>
+            <button onClick={clearZones} className="btn-ghost" style={{ padding: '5px 12px', fontSize: 12 }}>
+              Clear zones
+            </button>
+          </div>
         </div>
       )}
 
@@ -769,7 +803,7 @@ export default function WildfireMap() {
       </div>
 
       {/* Map */}
-      <div style={{ position: 'relative', flex: 1, minHeight: 480 }}>
+      <div style={{ position: 'relative', flex: 1, minHeight: 300 }}>
         {loading && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(6,8,16,0.7)', backdropFilter: 'blur(4px)' }}>
             <div style={{ textAlign: 'center' }}>
@@ -783,7 +817,83 @@ export default function WildfireMap() {
             <div style={{ color: 'var(--ember-400)', fontSize: 14 }}>{error}</div>
           </div>
         )}
-        <div ref={mapRef} style={{ width: '100%', height: '100%', minHeight: 480 }}/>
+        <div ref={mapRef} style={{ width: '100%', height: '100%' }}/>
+
+        {/* NIMS Resource Gap Alert */}
+        {(() => {
+          // Only show when firebreak active, zoneInfo exists, and resource data is available
+          if (!firebreakActive || !zoneInfo || !paramPersonnel || !paramEngines || !paramHelicopters) return null;
+
+          const NIMS_STANDARDS = {
+            HIGH:   { personnel: 700, engines: 70, helicopters: 14 },
+            MEDIUM: { personnel: 200, engines: 28, helicopters: 5 },
+            LOW:    { personnel: 50,  engines: 8,  helicopters: 1 },
+          };
+
+          const recommended = NIMS_STANDARDS[paramRisk] || NIMS_STANDARDS.LOW;
+          
+          const resources = [
+            { key: 'personnel', label: 'Personnel', deployed: paramPersonnel, needed: recommended.personnel },
+            { key: 'engines', label: 'Engines', deployed: paramEngines, needed: recommended.engines },
+            { key: 'helicopters', label: 'Helicopters', deployed: paramHelicopters, needed: recommended.helicopters },
+          ];
+
+          const hasGap = resources.some(r => r.deployed < r.needed);
+          const statusColor = hasGap ? '#ffc107' : '#00bf55';
+
+          return (
+            <div style={{
+              position: 'absolute',
+              bottom: 80,
+              left: 12,
+              zIndex: 900,
+              background: 'rgba(13,17,23,0.92)',
+              backdropFilter: 'blur(12px)',
+              border: '1px solid var(--glass-border)',
+              borderRadius: 10,
+              padding: '12px 16px',
+              minWidth: 220,
+              maxWidth: 260,
+            }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor }}/>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  NIMS COMPLIANCE
+                </span>
+              </div>
+
+              {/* Resource rows */}
+              {resources.map(r => {
+                const adequate = r.deployed >= r.needed;
+                const textColor = adequate ? '#00bf55' : '#ff5722';
+                return (
+                  <div key={r.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{r.label}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 11, color: textColor, fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                        {adequate ? `${r.deployed} / ${r.needed}` : `${r.deployed} deployed — need ${r.needed}`}
+                      </span>
+                      <span style={{ fontSize: 13 }}>{adequate ? '✓' : '⚠'}</span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Footer */}
+              <div style={{
+                marginTop: 10,
+                paddingTop: 10,
+                borderTop: '1px solid var(--glass-border)',
+                fontSize: 11,
+                color: statusColor,
+                fontWeight: 500,
+              }}>
+                {hasGap ? '⚠️ Resource gap detected' : `✅ Resources adequate for ${paramRisk} risk`}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Legend */}
@@ -854,9 +964,11 @@ export default function WildfireMap() {
             </div>
           </>
         )}
-        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
-          {hasPrediction ? 'Firebreak zones drawn from prediction ↑' : 'Run a prediction to see firebreak zones'}
-        </span>
+        {!firebreakActive && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+            Run a prediction to see firebreak zones
+          </span>
+        )}
       </div>
     </div>
   );

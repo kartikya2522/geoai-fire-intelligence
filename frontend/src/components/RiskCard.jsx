@@ -29,7 +29,7 @@ export default function RiskCard({ result }) {
   /* Build map URL from input features */
   const lat  = result.input_features?.Latitude  || 37.5;
   const lng  = result.input_features?.Longitude || -119.5;
-  const mapUrl = `/map?lat=${lat}&lng=${lng}&risk=${result.risk_level}&acres=${result.acres_est}`;
+  const mapUrl = `/map?lat=${lat}&lng=${lng}&risk=${result.risk_level}&acres=${result.acres_est}&personnel=${result.input_features?.PersonnelInvolved || 0}&engines=${result.input_features?.Engines || 0}&helicopters=${result.input_features?.Helicopters || 0}`;
 
   return (
     <div className="glass-card animate-fade-up" style={{

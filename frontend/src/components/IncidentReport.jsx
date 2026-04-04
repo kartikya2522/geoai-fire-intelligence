@@ -73,7 +73,7 @@ export default function IncidentReport({ result }) {
   };
 
   return (
-    <div style={{ marginTop: 16 }}>
+    <div style={{ marginTop: 16, minHeight: 80 }}>
 
       {/* Header + Generate button */}
       <div style={{
@@ -95,8 +95,8 @@ export default function IncidentReport({ result }) {
             }}>
               AI Incident Report Generator
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              Claude generates a formal report a fire chief would submit
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', minHeight: '2.8em' }}>
+              ICS-214 formatted incident report for operational logging and command review
             </div>
           </div>
         </div>

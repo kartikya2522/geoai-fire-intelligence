@@ -40,12 +40,13 @@ function MetricTile({ icon, label, value, sub, color, delay = 0, tileRef }) {
       background: 'rgba(255,255,255,0.03)',
       border: `1px solid ${color}28`,
       opacity: 0,
+      minWidth: 0,
     }}>
       <div style={{ fontSize: 22, marginBottom: 8 }}>{icon}</div>
       <div style={{
         fontFamily: 'var(--font-display)', fontWeight: 800,
-        fontSize: 26, color, letterSpacing: '-0.03em', lineHeight: 1,
-        marginBottom: 4,
+        fontSize: 'clamp(16px, 3.5vw, 26px)', color, letterSpacing: '-0.03em', lineHeight: 1.1,
+        marginBottom: 4, wordBreak: 'break-word', overflowWrap: 'break-word',
       }}>{value}</div>
       <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 2 }}>{label}</div>
       {sub && <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>{sub}</div>}
@@ -127,6 +128,61 @@ function CostComparisonBar({ preventionCost, reforestCost }) {
   );
 }
 
+/* ── Collapsible Sources & Disclaimer ─────────────────────────── */
+function CollapsibleSources({ damageEstimate }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: 'var(--text-muted)',
+          fontSize: 11,
+          cursor: 'pointer',
+          padding: 0,
+          textDecoration: 'underline',
+          fontFamily: 'var(--font-body)',
+        }}
+      >
+        ⓘ Sources & Disclaimer {expanded ? '▼' : '▶'}
+      </button>
+      
+      {expanded && damageEstimate.source && damageEstimate.disclaimer && (
+        <div style={{
+          marginTop: 8,
+          padding: '10px 12px',
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid var(--glass-border)',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          lineHeight: 1.6,
+        }}>
+          <div style={{ marginBottom: 8 }}>
+            <strong style={{ color: 'var(--text-secondary)' }}>Sources:</strong> {damageEstimate.source}
+          </div>
+          <div>
+            <strong style={{ color: 'var(--text-secondary)' }}>Disclaimer:</strong> {damageEstimate.disclaimer}
+          </div>
+          {damageEstimate.confidence_interval && (
+            <div style={{ marginTop: 6 }}>
+              <strong style={{ color: 'var(--text-secondary)' }}>Confidence:</strong> {damageEstimate.confidence_interval}
+            </div>
+          )}
+          {damageEstimate.base_year && (
+            <div style={{ marginTop: 4 }}>
+              <strong style={{ color: 'var(--text-secondary)' }}>Base Year:</strong> {damageEstimate.base_year}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main component ───────────────────────────────────────────── */
 export default function CarbonImpact({ result }) {
   const wrapRef  = useRef(null);
@@ -185,7 +241,7 @@ export default function CarbonImpact({ result }) {
   }, [result.risk_level, acres]);
 
   return (
-    <div ref={wrapRef} className="glass-card" style={{ padding: 28, opacity: 0 }}>
+    <div ref={wrapRef} className="glass-card" style={{ padding: 28, opacity: 0, position: 'relative', overflow: 'visible' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -197,9 +253,12 @@ export default function CarbonImpact({ result }) {
           <div style={{
             fontFamily: 'var(--font-display)', fontWeight: 700,
             fontSize: 18, letterSpacing: '-0.02em',
-          }}>Carbon & Ecological Cost</div>
+          }}>Environmental Cost Assessment</div>
         </div>
         <div style={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
           padding: '5px 12px', borderRadius: 20,
           background: 'rgba(255,87,34,0.1)',
           border: '1px solid rgba(255,87,34,0.25)',
@@ -212,7 +271,7 @@ export default function CarbonImpact({ result }) {
       </div>
 
       {/* 4 metric tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 6 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12, marginBottom: 6, width: '100%' }}>
         <MetricTile
           tileRef={tile1}
           icon="💨"
@@ -268,6 +327,20 @@ export default function CarbonImpact({ result }) {
             Economic Impact Estimate
           </div>
 
+          {/* Warning box */}
+          <div style={{
+            padding: '8px 12px',
+            marginBottom: 12,
+            background: 'rgba(220,38,38,0.08)',
+            border: '1px solid rgba(220,38,38,0.3)',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: 11,
+            color: '#ef4444',
+            fontWeight: 500,
+          }}>
+            ⚠️ For emergency planning use only — not for insurance or legal purposes
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{
               padding: '16px',
@@ -284,7 +357,7 @@ export default function CarbonImpact({ result }) {
                 fontSize: 22, color: '#ff5722', letterSpacing: '-0.02em',
               }}>{formatCost(damageEstimate.suppression_cost_usd)}</div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                $1,200/acre × {acres.toLocaleString()} acres
+                $1,363/acre × {acres.toLocaleString()} acres
               </div>
             </div>
 
@@ -328,18 +401,8 @@ export default function CarbonImpact({ result }) {
             </div>
           </div>
 
-          <div style={{
-            marginTop: 12,
-            padding: '10px 14px',
-            background: 'rgba(234,179,8,0.08)',
-            border: '1px solid rgba(234,179,8,0.2)',
-            borderRadius: 'var(--radius-sm)',
-            fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5,
-          }}>
-            💡 Based on CAL FIRE historical averages: Suppression $1,200/acre,
-            Property damage varies by risk level (LOW: $5K, MEDIUM: $12K, HIGH: $25K per acre).
-            These are estimates — actual costs vary widely based on terrain, structures, and response effectiveness.
-          </div>
+          {/* Collapsible sources section */}
+          <CollapsibleSources damageEstimate={damageEstimate} />
         </div>
       )}
 
@@ -348,10 +411,10 @@ export default function CarbonImpact({ result }) {
         marginTop: 16,
         fontSize: 10, color: 'var(--text-muted)',
         lineHeight: 1.6, fontFamily: 'var(--font-mono)',
+        fontStyle: 'italic',
         borderTop: '1px solid var(--glass-border)', paddingTop: 10,
       }}>
-        Estimates based on US Forest Service data · 1 acre ≈ {CO2_PER_ACRE}t CO₂ · {TREES_PER_ACRE} trees/acre · {KG_CO2_PER_TREE_YR}kg CO₂/tree/yr
-        · Reforestation ${REFOREST_COST_ACRE}/acre · Prevention ${PREVENTION_COST}/acre
+        Data sources: US Forest Service Carbon Sequestration Calculator; CAL FIRE Reforestation Cost Report 2021; EPA Greenhouse Gas Equivalencies Calculator. Carbon figures use IPCC AR6 forest carbon density values for California mixed conifer ecosystems.
       </div>
     </div>
   );

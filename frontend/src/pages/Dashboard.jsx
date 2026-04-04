@@ -34,194 +34,223 @@ const TABS = [
 const RISK_COLOR = { HIGH: '#ff5722', MEDIUM: '#ffc107', LOW: '#00bf55' };
 const RISK_BG    = { HIGH: 'rgba(255,87,34,0.08)', MEDIUM: 'rgba(255,193,7,0.07)', LOW: 'rgba(0,191,85,0.07)' };
 
-const SIM_SLIDERS = [
-  { key: 'PercentContained',  label: 'Containment %', min: 0,   max: 100,  step: 5,  unit: '%' },
-  { key: 'PersonnelInvolved', label: 'Personnel',      min: 0,   max: 1000, step: 10, unit: ''  },
-  { key: 'Engines',           label: 'Engines',        min: 0,   max: 150,  step: 1,  unit: ''  },
-  { key: 'Helicopters',       label: 'Helicopters',    min: 0,   max: 30,   step: 1,  unit: ''  },
-  { key: 'Dozers',            label: 'Bulldozers',     min: 0,   max: 20,   step: 1,  unit: ''  },
-];
-
-/* ── What-If Simulator — standalone card ─────────────────────── */
-function WhatIfSimulator({ baseResult }) {
-  const [simVals,   setSimVals]   = useState(null);
-  const [simResult, setSimResult] = useState(null);
-  const [simming,   setSimming]   = useState(false);
-  const [open,      setOpen]      = useState(false);
-  const debounceRef = useRef(null);
+/* ── Scenario Comparison — full width in left column ────────────── */
+function ScenarioComparison({ baseResult }) {
+  const [compVals, setCompVals] = useState(null);
+  const [compResult, setCompResult] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!baseResult?.input_features) return;
     const f = baseResult.input_features;
-    setSimVals({
-      PercentContained:  f.PercentContained  ?? 50,
+    setCompVals({
+      PercentContained: f.PercentContained ?? 50,
       PersonnelInvolved: f.PersonnelInvolved ?? 50,
-      Engines:           f.Engines           ?? 10,
-      Helicopters:       f.Helicopters       ?? 2,
-      Dozers:            f.Dozers            ?? 1,
+      Engines: f.Engines ?? 10,
+      Helicopters: f.Helicopters ?? 2,
     });
-    setSimResult(baseResult);
-    setOpen(false);
+    setCompResult(null);
   }, [baseResult?.risk_level]);
 
-  const runSim = useCallback((vals) => {
-    if (!baseResult?.input_features) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setSimming(true);
-      try {
-        const payload = {
-          ...baseResult.input_features,
-          ...vals,
-          County:            parseInt(baseResult.input_features.County),
-          MajorIncident:     parseInt(baseResult.input_features.MajorIncident),
-          PersonnelInvolved: parseInt(vals.PersonnelInvolved),
-          Engines:           parseInt(vals.Engines),
-          Helicopters:       parseInt(vals.Helicopters),
-          Dozers:            parseInt(vals.Dozers),
-          PercentContained:  parseFloat(vals.PercentContained),
-        };
-        const { data } = await axios.post(`${API}/predict`, payload);
-        setSimResult(data);
-      } catch { /* silent */ }
-      finally { setSimming(false); }
-    }, 400);
-  }, [baseResult]);
-
-  const handleSlider = (key, val) => {
-    const next = { ...simVals, [key]: val };
-    setSimVals(next);
-    runSim(next);
+  const runComparison = async () => {
+    if (!baseResult?.input_features || !compVals) return;
+    setLoading(true);
+    try {
+      const payload = {
+        ...baseResult.input_features,
+        PercentContained: parseFloat(compVals.PercentContained),
+        PersonnelInvolved: parseInt(compVals.PersonnelInvolved),
+        Engines: parseInt(compVals.Engines),
+        Helicopters: parseInt(compVals.Helicopters),
+        County: parseInt(baseResult.input_features.County),
+        MajorIncident: parseInt(baseResult.input_features.MajorIncident),
+        Dozers: parseInt(baseResult.input_features.Dozers),
+        WaterTenders: parseInt(baseResult.input_features.WaterTenders),
+      };
+      const { data } = await axios.post(`${API}/predict`, payload);
+      setCompResult(data);
+    } catch (err) {
+      console.error('Comparison failed:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!baseResult) return null;
 
-  const risk   = simResult?.risk_level || baseResult.risk_level;
-  const rColor = RISK_COLOR[risk];
-  const rBg    = RISK_BG[risk];
-  const changed = simResult && risk !== baseResult.risk_level;
+  const renderPredictionCard = (result, label, isPlaceholder = false) => {
+    if (isPlaceholder) {
+      return (
+        <div style={{
+          padding: '16px',
+          borderRadius: 'var(--radius-md)',
+          background: 'rgba(255,255,255,0.02)',
+          border: '1px solid var(--glass-border)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: 220,
+          overflow: 'hidden',
+          minWidth: 0,
+        }}>
+          <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>
+            Run comparison to see result
+          </div>
+        </div>
+      );
+    }
+
+    if (!result) return null;
+    const risk = result.risk_level;
+    const color = RISK_COLOR[risk];
+    const bg = RISK_BG[risk];
+    return (
+      <div style={{
+        padding: '16px',
+        borderRadius: 'var(--radius-md)',
+        background: bg,
+        border: `1px solid ${color}30`,
+        minHeight: 220,
+        overflow: 'hidden',
+        minWidth: 0,
+      }}>
+        <div style={{
+          fontSize: 11,
+          color: 'var(--text-muted)',
+          fontFamily: 'var(--font-display)',
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          marginBottom: 10,
+        }}>{label}</div>
+        <div style={{
+          fontFamily: 'var(--font-display)',
+          fontWeight: 800,
+          fontSize: 28,
+          color: color,
+          letterSpacing: '-0.02em',
+          marginBottom: 10,
+        }}>{risk}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+          Confidence: <strong style={{ color: '#fff' }}>{(result.confidence * 100).toFixed(1)}%</strong>
+        </div>
+        {/* Probability bars */}
+        {result.probabilities && (
+          <div style={{ marginTop: 10 }}>
+            {[['LOW', '#00bf55'], ['MEDIUM', '#ffc107'], ['HIGH', '#ff5722']].map(([cls, clr]) => (
+              <div key={cls} style={{ marginBottom: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{cls}</span>
+                  <span style={{ fontSize: 10, color: clr, fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                    {((result.probabilities[cls] || 0) * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <div style={{ height: 3, background: 'rgba(255,255,255,0.05)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    borderRadius: 2,
+                    background: clr,
+                    width: `${(result.probabilities[cls] || 0) * 100}%`,
+                    transition: 'width 0.5s ease',
+                  }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const baseRisk = baseResult.risk_level;
+  const compRisk = compResult?.risk_level;
+  const riskChanged = compResult && baseRisk !== compRisk;
 
   return (
-    <div className="glass-card" style={{ padding: 0, overflow: 'hidden' }}>
-
-      {/* Header — always visible, click to expand */}
-      <button onClick={() => setOpen(o => !o)} style={{
-        width: '100%', padding: '14px 18px',
-        background: 'none', border: 'none', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        borderBottom: open ? '1px solid var(--glass-border)' : 'none',
+    <div className="glass-card" style={{ padding: 20, marginTop: 16 }}>
+      <div style={{
+        fontFamily: 'var(--font-display)',
+        fontWeight: 600,
+        fontSize: 14,
+        marginBottom: 16,
+        paddingBottom: 10,
+        borderBottom: '1px solid var(--glass-border)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 15 }}>🔮</span>
-          <div style={{ textAlign: 'left' }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>
-              What-If Simulator
+        🔮 Scenario Comparison
+      </div>
+
+      {/* Top section: two cards side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        {renderPredictionCard(baseResult, 'CURRENT SCENARIO')}
+        {compResult ? renderPredictionCard(compResult, 'MODIFIED SCENARIO') : renderPredictionCard(null, 'MODIFIED SCENARIO', true)}
+      </div>
+
+      {/* Status bar between cards */}
+      {compResult && (
+        <div style={{
+          textAlign: 'center',
+          padding: '10px',
+          marginBottom: 16,
+          borderRadius: 'var(--radius-sm)',
+          background: riskChanged ? 'rgba(255,193,7,0.08)' : 'rgba(0,191,85,0.08)',
+          border: riskChanged ? '1px solid rgba(255,193,7,0.2)' : '1px solid rgba(0,191,85,0.2)',
+        }}>
+          {riskChanged ? (
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#ffc107' }}>
+              ⚠️ Risk changed: {baseRisk} → {compRisk}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              Adjust parameters, see risk update live
+          ) : (
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#00bf55' }}>
+              ✓ No change in risk level
             </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {simResult && (
-            <span style={{
-              fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-display)',
-              color: rColor, padding: '2px 8px',
-              background: rBg, borderRadius: 10,
-              border: `1px solid ${rColor}30`,
-            }}>
-              {risk}
-            </span>
           )}
-          <span style={{
-            fontSize: 16, color: 'var(--text-muted)',
-            transform: open ? 'rotate(90deg)' : 'none',
-            transition: 'transform 0.2s', display: 'inline-block',
-          }}>▶</span>
         </div>
-      </button>
+      )}
 
-      {/* Expanded body */}
-      {open && simVals && (
-        <div style={{ padding: '16px 18px' }}>
-
-          {/* Live badge */}
+      {/* Bottom section: sliders */}
+      {compVals && (
+        <div>
           <div style={{
-            padding: '10px 14px', marginBottom: 14, borderRadius: 'var(--radius-sm)',
-            background: rBg, border: `1px solid ${rColor}30`,
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            transition: 'all 0.3s',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {simming && <span className="spinner" style={{ width: 12, height: 12 }}/>}
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Live Risk</div>
-                <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 20, color: rColor, lineHeight: 1 }}>{risk}</div>
-              </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Confidence</div>
-              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 18, color: '#fff' }}>
-                {simResult ? (simResult.confidence * 100).toFixed(1) + '%' : '—'}
-              </div>
-            </div>
-          </div>
+            fontSize: 11,
+            color: 'var(--text-muted)',
+            fontFamily: 'var(--font-display)',
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            marginBottom: 10,
+          }}>Modify Parameters</div>
 
-          {/* Risk changed warning */}
-          {changed && (
-            <div style={{
-              padding: '7px 10px', marginBottom: 12,
-              background: 'rgba(255,193,7,0.1)', border: '1px solid rgba(255,193,7,0.3)',
-              borderRadius: 'var(--radius-sm)', fontSize: 11, color: '#ffc107', fontWeight: 500,
-            }}>
-              ⚠️ Risk changed: <strong>{baseResult.risk_level}</strong> → <strong style={{ color: rColor }}>{risk}</strong>
-            </div>
-          )}
-
-          {/* Sliders */}
-          {SIM_SLIDERS.map(s => (
-            <div key={s.key} style={{ marginBottom: 13 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{s.label}</span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: rColor, fontWeight: 600 }}>
-                  {simVals[s.key]}{s.unit}
+          {[
+            { key: 'PercentContained', label: 'Containment %', min: 0, max: 100, step: 5, unit: '%' },
+            { key: 'PersonnelInvolved', label: 'Personnel', min: 0, max: 1000, step: 10, unit: '' },
+            { key: 'Engines', label: 'Engines', min: 0, max: 150, step: 1, unit: '' },
+            { key: 'Helicopters', label: 'Helicopters', min: 0, max: 30, step: 1, unit: '' },
+          ].map(field => (
+            <div key={field.key} style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{field.label}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--ember-400)', fontWeight: 600 }}>
+                  {compVals[field.key]}{field.unit}
                 </span>
               </div>
-              <input type="range"
-                min={s.min} max={s.max} step={s.step}
-                value={simVals[s.key]}
-                onChange={e => handleSlider(s.key, parseFloat(e.target.value))}
-                style={{ width: '100%', accentColor: rColor, cursor: 'pointer', transition: 'accent-color 0.3s' }}
+              <input
+                type="range"
+                min={field.min}
+                max={field.max}
+                step={field.step}
+                value={compVals[field.key]}
+                onChange={(e) => setCompVals({ ...compVals, [field.key]: parseFloat(e.target.value) })}
+                style={{ width: '100%', accentColor: 'var(--ember-500)', cursor: 'pointer' }}
               />
             </div>
           ))}
 
-          {/* Probability bars */}
-          {simResult?.probabilities && (
-            <div style={{ marginTop: 8 }}>
-              {[['LOW','#00bf55'],['MEDIUM','#ffc107'],['HIGH','#ff5722']].map(([cls, clr]) => (
-                <div key={cls} style={{ marginBottom: 7 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{cls}</span>
-                    <span style={{ fontSize: 11, color: clr, fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                      {((simResult.probabilities[cls] || 0) * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <div style={{ height: 3, background: 'rgba(255,255,255,0.05)', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%', borderRadius: 2, background: clr,
-                      width: `${(simResult.probabilities[cls] || 0) * 100}%`,
-                      transition: 'width 0.5s ease',
-                    }}/>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ marginTop: 10, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', borderTop: '1px solid var(--glass-border)', paddingTop: 8 }}>
-            Updates every 400ms · base: {baseResult.risk_level}
-          </div>
+          <button
+            onClick={runComparison}
+            disabled={loading}
+            className="btn-primary"
+            style={{ width: '100%', justifyContent: 'center', marginTop: 10 }}
+          >
+            {loading ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Running...</> : '▶ Run Comparison'}
+          </button>
         </div>
       )}
     </div>
@@ -268,7 +297,6 @@ function ResultTabs({ result }) {
             <FeatureImportance result={result} />
             <div style={{ height: 1, background: 'var(--glass-border)' }}/>
             <ResourceRecommendation result={result} />
-            <MutualAidRequest result={result} />
           </div>
         )}
 
@@ -426,18 +454,13 @@ export default function Dashboard() {
 
           {/* Weather Strip — shows after prediction */}
           {result && (
-            <WeatherStrip
-              lat={parseFloat(form.Latitude)}
-              lon={parseFloat(form.Longitude)}
-            />
-          )}
-
-          {/* Report + Simulator — stacked below form */}
-          {result && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
-              <IncidentReport result={result} />
-              <WhatIfSimulator baseResult={result} />
-            </div>
+            <>
+              <WeatherStrip
+                lat={parseFloat(form.Latitude)}
+                lon={parseFloat(form.Longitude)}
+              />
+              <ScenarioComparison baseResult={result} />
+            </>
           )}
         </div>
 
@@ -465,8 +488,6 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* What-If Simulator — REMOVED from here, moved below */}
-
           {/* Model info */}
           <div className="glass-card" style={{ padding: '16px 18px' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-display)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>
@@ -487,6 +508,31 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Operational Documents Section — full width below grid */}
+      {result && (
+        <div style={{ marginTop: 32 }}>
+          <div style={{
+            fontFamily: 'var(--font-display)',
+            fontWeight: 700,
+            fontSize: 20,
+            letterSpacing: '-0.02em',
+            marginBottom: 18,
+            paddingBottom: 10,
+            borderBottom: '1px solid var(--glass-border)',
+          }}>
+            📄 Operational Documents
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'stretch' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <IncidentReport result={result} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <MutualAidRequest result={result} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

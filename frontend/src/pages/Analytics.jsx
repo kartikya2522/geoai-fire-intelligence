@@ -10,7 +10,6 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { fetchAnalytics, fetchModelInfo } from '../hooks/usePrediction';
 import CountyConfidence from '../components/CountyConfidence';
 import ForecastChart    from '../components/ForecastChart';
-import FireCalendar     from '../components/FireCalendar';
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, ArcElement,
@@ -345,6 +344,15 @@ export default function Analytics() {
       <ChartCard>
         <ForecastChart />
       </ChartCard>
+      <div style={{
+        fontSize: 11,
+        color: 'var(--text-muted)',
+        fontStyle: 'italic',
+        marginTop: 8,
+        lineHeight: 1.5,
+      }}>
+        Forecast model trained on CAL FIRE incident records 2013–2022. Statistical fallback used when Prophet library unavailable. Projections are indicative only.
+      </div>
 
       {/* Model comparison */}
       {modelNames.length > 0 && <>
@@ -380,11 +388,6 @@ export default function Analytics() {
           <InsightCard key={item.title} title={item.title} body={item.body} delay={i * 0.1} />
         ))}
       </div>
-      {/* Fire Season Risk Calendar */}
-      <SectionTitle>Fire Season Risk Calendar</SectionTitle>
-      <ChartCard>
-        <FireCalendar />
-      </ChartCard>
 
       {/* County Confidence Heatmap */}
       <SectionTitle>Model Confidence by County</SectionTitle>

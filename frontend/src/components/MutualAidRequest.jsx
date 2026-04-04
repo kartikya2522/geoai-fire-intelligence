@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const API = 'http://localhost:8000';
@@ -6,6 +6,15 @@ const API = 'http://localhost:8000';
 export default function MutualAidRequest({ result }) {
   const [status, setStatus] = useState(null); // null | 'generating' | 'done' | 'error'
   const [request, setRequest] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  // Auto-reset when result changes
+  useEffect(() => {
+    if (!result) return;
+    const inputKey = JSON.stringify(result.input_features);
+    setStatus(null);
+    setRequest(null);
+  }, [result?.input_features ? JSON.stringify(result.input_features) : null]);
 
   if (!result) return null;
 
@@ -34,6 +43,29 @@ export default function MutualAidRequest({ result }) {
     }
   };
 
+  const handleCopy = async () => {
+    const text = request?.request_text;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for browsers that block clipboard API
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   const handleDownload = () => {
     const text = request?.request_text;
     if (!text) return;
@@ -52,8 +84,9 @@ export default function MutualAidRequest({ result }) {
   const riskColor = result.risk_level === 'HIGH' ? '#ff5722' : '#ffc107';
 
   return (
-    <div style={{ marginTop: 20 }}>
-      {/* Header + Generate button */}
+    <div style={{ marginTop: 16, minHeight: 80 }}>
+
+      {/* Header + Action buttons */}
       <div style={{
         padding: '14px 18px',
         background: `${riskColor}12`,
@@ -71,7 +104,7 @@ export default function MutualAidRequest({ result }) {
               fontFamily: 'var(--font-display)', fontWeight: 600,
               fontSize: 13, color: 'var(--text-primary)',
             }}>
-              Generate Mutual Aid Request
+              Mutual Aid Request Generator
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
               NIMS ICS-213 formatted document for {result.risk_level} severity incident
@@ -79,30 +112,70 @@ export default function MutualAidRequest({ result }) {
           </div>
         </div>
 
-        {status === null && (
-          <button onClick={handleGenerate} className="btn-primary" style={{
-            padding: '7px 16px', fontSize: 12, flexShrink: 0,
-          }}>
-            Generate Request
-          </button>
-        )}
-
-        {status === 'generating' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className="spinner" style={{ width: 14, height: 14 }}/>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Generating...</span>
+        {status === 'done' ? (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={handleCopy} style={{
+              padding: '6px 12px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--glass-border)',
+              background: copied ? 'rgba(0,191,85,0.1)' : 'transparent',
+              color: copied ? '#00bf55' : 'var(--text-secondary)',
+              fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font-body)',
+              transition: 'var(--transition)',
+            }}>
+              {copied ? '✓ Copied' : '📋 Copy'}
+            </button>
+            <button onClick={handleDownload} style={{
+              padding: '6px 12px', borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--glass-border)',
+              background: 'transparent',
+              color: 'var(--text-secondary)',
+              fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font-body)',
+            }}>
+              ⬇ Download
+            </button>
+            <button onClick={handleGenerate} style={{
+              padding: '6px 12px', borderRadius: 'var(--radius-sm)',
+              border: `1px solid ${riskColor}`,
+              background: `${riskColor}14`,
+              color: riskColor,
+              fontSize: 12, cursor: 'pointer', fontFamily: 'var(--font-body)',
+            }}>
+              ↺ Regenerate
+            </button>
           </div>
+        ) : (
+          <button
+            onClick={handleGenerate}
+            disabled={status === 'generating'}
+            style={{
+              padding: '9px 18px', borderRadius: 'var(--radius-sm)',
+              border: 'none',
+              background: status === 'generating'
+                ? `${riskColor}33`
+                : `${riskColor}cc`,
+              color: '#fff', fontSize: 13, fontWeight: 600,
+              cursor: status === 'generating' ? 'not-allowed' : 'pointer',
+              fontFamily: 'var(--font-display)',
+              display: 'flex', alignItems: 'center', gap: 7,
+              transition: 'var(--transition)', whiteSpace: 'nowrap',
+            }}
+          >
+            {status === 'generating'
+              ? <><span className="spinner" style={{ width: 13, height: 13 }}/> Generating...</>
+              : '✦ Generate Request'}
+          </button>
         )}
       </div>
 
       {/* Request output */}
       {status === 'done' && request && (
         <div style={{
-          background: 'rgba(0,0,0,0.3)',
           border: `1px solid ${riskColor}30`,
           borderTop: 'none',
           borderRadius: '0 0 var(--radius-md) var(--radius-md)',
-          padding: 16,
+          overflow: 'hidden',
+          maxHeight: 420,
+          overflowY: 'auto',
         }}>
           <textarea
             readOnly
@@ -111,53 +184,26 @@ export default function MutualAidRequest({ result }) {
               width: '100%',
               minHeight: 400,
               background: 'rgba(0,0,0,0.4)',
-              border: '1px solid var(--glass-border)',
-              borderRadius: 'var(--radius-sm)',
+              border: 'none',
               color: 'var(--text-primary)',
               fontSize: 11,
               fontFamily: 'var(--font-mono)',
               padding: 12,
-              resize: 'vertical',
+              resize: 'none',
               lineHeight: 1.5,
             }}
           />
-
-          <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
-            <button onClick={handleDownload} className="btn-primary" style={{
-              padding: '8px 16px', fontSize: 12,
-            }}>
-              ⬇ Download .txt
-            </button>
-            <div style={{
-              padding: '8px 14px',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid var(--glass-border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: 11,
-              color: 'var(--text-muted)',
-              display: 'flex', alignItems: 'center', gap: 8,
-            }}>
-              <span>Incident ID: <strong style={{ color: 'var(--text-secondary)' }}>{request.incident_id}</strong></span>
-              {request.resource_gaps && (
-                <>
-                  <span>•</span>
-                  <span>Gaps: Personnel +{request.resource_gaps.personnel}, Engines +{request.resource_gaps.engines}</span>
-                </>
-              )}
-            </div>
-          </div>
         </div>
       )}
 
+      {/* Error state */}
       {status === 'error' && (
         <div style={{
-          background: 'rgba(220,38,38,0.1)',
-          border: '1px solid rgba(220,38,38,0.3)',
-          borderTop: 'none',
-          borderRadius: '0 0 var(--radius-md) var(--radius-md)',
-          padding: 14,
-          color: '#ff5555',
-          fontSize: 12,
+          marginTop: 8, padding: '10px 14px',
+          background: 'rgba(255,87,34,0.08)',
+          border: '1px solid rgba(255,87,34,0.2)',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: 12, color: 'var(--ember-300)',
         }}>
           ⚠ Failed to generate mutual aid request. Please try again.
         </div>
