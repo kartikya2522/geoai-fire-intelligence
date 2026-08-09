@@ -1,9 +1,9 @@
 __pycache__/
 *.pyc
 .env
-*.pkl
+# *.pkl
 *.joblib
-models/
+# models/
 data/raw/
 data/processed/
 frontend/node_modules/
