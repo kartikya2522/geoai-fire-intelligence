@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import axios from 'axios';
 
-const API = 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const RISK_CFG = {
   EXTREME: { color: '#ff3d00', bg: 'rgba(255,61,0,0.18)',  border: 'rgba(255,61,0,0.5)',   glow: '0 0 12px rgba(255,61,0,0.35)',  emoji: '🔥' },

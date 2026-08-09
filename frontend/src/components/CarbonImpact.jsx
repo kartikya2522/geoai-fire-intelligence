@@ -212,7 +212,7 @@ export default function CarbonImpact({ result }) {
   useEffect(() => {
     const fetchDamageEstimate = async () => {
       try {
-        const { data } = await axios.get('http://localhost:8000/damage-estimate', {
+        const { data } = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/damage-estimate`, {
           params: {
             risk_level: result.risk_level,
             acres_est: acres,

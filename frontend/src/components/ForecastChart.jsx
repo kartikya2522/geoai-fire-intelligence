@@ -19,7 +19,7 @@ ChartJS.register(
   BarElement, Tooltip, Legend, Filler,
 );
 
-const API = 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const TREND_BADGE = {
   increasing: { label: '↑ Increasing', color: '#ff5722', bg: 'rgba(255,87,34,0.1)' },
